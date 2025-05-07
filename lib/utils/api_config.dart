@@ -3,8 +3,8 @@ import 'api_service.dart';
 /// API configuration for the API
 class ApiConfig {
   /// The base URL for the API
-  static const String baseUrl = 'http://localhost:8000'; // Replace with actual API URL
-//   static const String baseUrl = 'http://localhost:8000'; // Replace with actual API URL
+  // static const String baseUrl = 'http://localhost:8000'; // Replace with actual API URL
+  static const String baseUrl = 'https://app.24hcartaiwan.com'; // Replace with actual API URL
   
   /// Get the API implementation
   static dynamic get api => ApiService;
