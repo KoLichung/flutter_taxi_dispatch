@@ -508,6 +508,29 @@ class _MessageListView extends StatelessWidget {
     required this.formatTime,
   });
   
+  // 判斷是否為可取消的訊息類型
+  bool _isCancellableMessage(String content) {
+    try {
+      final lines = content.split('\n');
+      // 檢查是否至少有兩行
+      if (lines.length < 2) return false;
+      
+      // 檢查第一行是否包含訂單號碼
+      final firstLine = lines[0];
+      if (!firstLine.contains('❤️')) return false;
+      
+      // 檢查第二行是否包含可取消的訊息特徵
+      final secondLine = lines[1];
+      return secondLine.contains('預約單成功') ||
+             secondLine.contains('派單成功，正在尋找駕駛') ||
+             secondLine.contains('車輛預估') ||
+             secondLine.contains('司機到達地點');
+    } catch (e) {
+      print('Error in _isCancellableMessage: $e');
+      return false;
+    }
+  }
+  
   @override
   Widget build(BuildContext context) {
     return ListView.builder(
@@ -531,6 +554,7 @@ class _MessageListView extends StatelessWidget {
   
   Widget _buildMessageItem(BuildContext context, Message message) {
     final isUserMessage = !message.isFromServer;
+    final isCancellable = !isUserMessage && _isCancellableMessage(message.content);
     
     return Align(
       alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
@@ -546,12 +570,119 @@ class _MessageListView extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.content,
-              style: TextStyle(
-                fontSize: 16,
-                color: isUserMessage ? Colors.white : Colors.black87,
-              ),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Padding(
+                  padding: EdgeInsets.only(left: isCancellable ? 24 : 0),
+                  child: Text(
+                    message.content,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: isUserMessage ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                ),
+                if (isCancellable)
+                  Positioned(
+                    left: -12,
+                    top: 0,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () {
+                          print("點擊取消按鈕");
+                          // 顯示確認對話框
+                          showDialog(
+                            context: context,
+                            builder: (BuildContext context) {
+                              try {
+                                // 獲取包含訂單編號的行
+                                final lines = message.content.split('\n');
+                                String? orderLine;
+                                
+                                for (final line in lines) {
+                                  if (line.contains('❤️') && line.contains('❤️')) {
+                                    orderLine = line;
+                                    break;
+                                  }
+                                }
+                                
+                                final content = orderLine != null
+                                    ? '取消\n$orderLine'
+                                    : '確定要送出取消訊息嗎？';
+                                
+                                return AlertDialog(
+                                  title: const Text('取消派單訊息', style: TextStyle(fontSize: 14)),
+                                  content: Text(content, style: const TextStyle(fontSize: 16)),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      child: const Text('取消'),
+                                    ),
+                                    TextButton(
+                                      onPressed: () {
+                                        Navigator.of(context).pop();
+                                        print("確認送出取消訊息");
+                                        
+                                        // 發送取消訊息
+                                        final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+                                        
+                                        // 發送取消訊息的內容
+                                        final messageContent = content;
+                                        messageProvider.sendMessage(messageContent);
+                                        
+                                        // 滾動到底部
+                                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                                          scrollController.animateTo(
+                                            0,
+                                            duration: const Duration(milliseconds: 300),
+                                            curve: Curves.easeOut,
+                                          );
+                                        });
+                                      },
+                                      child: const Text('送出'),
+                                    ),
+                                  ],
+                                );
+                              } catch (e) {
+                                print('Error in dialog: $e');
+                                return AlertDialog(
+                                  title: const Text('錯誤'),
+                                  content: Text('處理訊息時出錯: $e'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.of(context).pop(),
+                                      child: const Text('確定'),
+                                    ),
+                                  ],
+                                );
+                              }
+                            },
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(15),
+                        customBorder: const CircleBorder(),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              size: 14,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 4),
             Row(
@@ -579,7 +710,7 @@ class _MessageListView extends StatelessWidget {
                   },
                   child: Icon(
                     Icons.copy,
-                    size: 16,
+                    size: 24,
                     color: isUserMessage ? Colors.white70 : Colors.grey.shade700,
                   ),
                 ),
