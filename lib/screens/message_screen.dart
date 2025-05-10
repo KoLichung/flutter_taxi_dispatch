@@ -224,7 +224,7 @@ class _MessageScreenState extends State<MessageScreen> {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final messageProvider = Provider.of<MessageProvider>(context);
-    final username = userProvider.user?.name ?? userProvider.user?.phone ?? '用戶';
+    final username = userProvider.user?.nickName ?? userProvider.user?.phone ?? '用戶';
     
     // 只在非加載更多狀態下保存滾動位置（針對新消息到達的情況）
     final currentScrollPosition = !_isLoadingMore && _scrollController.hasClients 
@@ -324,7 +324,7 @@ class _MessageScreenState extends State<MessageScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('24H 派車 - $username'),
+          title: Text('24H 派車 - ${userProvider.user?.nickName ?? '用戶'}'),
           centerTitle: true,  // Center the title
           backgroundColor: const Color(0xFF469030),
           foregroundColor: Colors.white,
