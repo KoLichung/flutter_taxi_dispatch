@@ -345,7 +345,7 @@ class _MessageScreenAnimatedListState extends State<MessageScreenAnimatedList> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('24H 派車 (動畫版) - $username'),
+          title: Text('24H 叫車 (動畫版) - $username'),
           centerTitle: true,
           backgroundColor: const Color(0xFF469030),
           foregroundColor: Colors.white,

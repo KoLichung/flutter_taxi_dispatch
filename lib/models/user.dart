@@ -4,6 +4,7 @@ class User {
   final String? name;
   final String? nickName;
   final bool isLoggedIn;
+  final bool isTelegramBotEnable;
 
   User({
     this.id,
@@ -11,6 +12,7 @@ class User {
     this.name,
     this.nickName,
     this.isLoggedIn = false,
+    this.isTelegramBotEnable = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -20,6 +22,7 @@ class User {
       name: json['name'],
       nickName: json['nick_name'] ?? json['nickName'],
       isLoggedIn: json['isLoggedIn'] ?? false,
+      isTelegramBotEnable: json['is_telegram_bot_enable'] ?? false,
     );
   }
 
@@ -30,6 +33,7 @@ class User {
       'name': name,
       'nick_name': nickName,
       'isLoggedIn': isLoggedIn,
+      'is_telegram_bot_enable': isTelegramBotEnable,
     };
   }
 
@@ -39,6 +43,7 @@ class User {
     String? name,
     String? nickName,
     bool? isLoggedIn,
+    bool? isTelegramBotEnable,
   }) {
     return User(
       id: id ?? this.id,
@@ -46,6 +51,7 @@ class User {
       name: name ?? this.name,
       nickName: nickName ?? this.nickName,
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      isTelegramBotEnable: isTelegramBotEnable ?? this.isTelegramBotEnable,
     );
   }
 } 

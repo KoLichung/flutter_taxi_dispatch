@@ -9,15 +9,24 @@ class UserProvider extends ChangeNotifier {
   User? _user;
   bool _isLoading = false;
   String? _loginError;
+  String? _registerError;
 
   User? get user => _user;
   bool get isLoading => _isLoading;
   bool get isLoggedIn => _user != null && _user!.isLoggedIn;
   String? get loginError => _loginError;
+  String? get registerError => _registerError;
 
   void clearLoginError() {
     if (_loginError != null) {
       _loginError = null;
+      notifyListeners();
+    }
+  }
+
+  void clearRegisterError() {
+    if (_registerError != null) {
+      _registerError = null;
       notifyListeners();
     }
   }
@@ -74,6 +83,36 @@ class UserProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> register(String phone, String password, String name, String nickName) async {
+    _isLoading = true;
+    _registerError = null;
+    notifyListeners();
+
+    try {
+      final user = await ApiConfig.register(phone, password, name, nickName);
+      // 註冊成功後自動登入
+      _user = user;
+      await _saveUser();
+      return true;
+    } catch (e) {
+      debugPrint('Error registering: $e');
+      
+      String errorMsg = e.toString();
+      if (errorMsg.startsWith('Exception: ')) {
+        errorMsg = errorMsg.substring('Exception: '.length);
+      }
+      
+      _registerError = errorMsg;
+      
+      _showErrorSnackBar(errorMsg);
+      
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   void _showErrorSnackBar(String message) {
     if (navigatorKey.currentContext != null) {
       final context = navigatorKey.currentContext!;
@@ -112,6 +151,42 @@ class UserProvider extends ChangeNotifier {
     if (_user != null) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('user', json.encode(_user!.toJson()));
+    }
+  }
+
+  Future<bool> deleteUser() async {
+    _isLoading = true;
+    notifyListeners();
+    debugPrint('開始處理用戶刪除請求');
+
+    try {
+      debugPrint('調用 ApiConfig.deleteUser()');
+      await ApiConfig.deleteUser();
+      debugPrint('API 刪除用戶請求成功');
+      
+      debugPrint('清除本地用戶狀態');
+      _user = null;
+      // 用戶已自動登出
+      
+      debugPrint('用戶刪除流程完成');
+      return true;
+    } catch (e) {
+      debugPrint('刪除用戶發生錯誤: $e');
+      
+      String errorMsg = e.toString();
+      if (errorMsg.startsWith('Exception: ')) {
+        errorMsg = errorMsg.substring('Exception: '.length);
+        debugPrint('格式化錯誤訊息: $errorMsg');
+      }
+      
+      debugPrint('顯示錯誤訊息');
+      _showErrorSnackBar(errorMsg);
+      
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('刪除用戶處理完成，通知 UI 更新');
     }
   }
 } 

@@ -24,7 +24,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MessageProvider()),
       ],
       child: MaterialApp(
-        title: '24H 派車',
+        title: '24H 叫車',
         debugShowCheckedModeBanner: false,
         // 使用全局 NavigatorKey
         navigatorKey: navigatorKey,
@@ -59,7 +59,7 @@ class SplashScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
-              '24H 派車',
+              '24H 叫車',
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
