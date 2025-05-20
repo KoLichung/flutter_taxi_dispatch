@@ -26,6 +26,9 @@ class ApiService {
   
   // Authentication API
   static Future<User> login(String phone, String password) async {
+    debugPrint('開始發送登入請求到: $baseUrl/api/dispatch/login/');
+    debugPrint('請求參數: phone=$phone, password=***');
+    
     final response = await http.post(
       Uri.parse('$baseUrl/api/dispatch/login/'),
       headers: {'Content-Type': 'application/json'},
@@ -35,10 +38,21 @@ class ApiService {
       }),
     );
     
+    debugPrint('登入 API 響應狀態碼: ${response.statusCode}');
+    debugPrint('登入 API 響應標頭: ${response.headers}');
+    
+    // 使用utf8.decode處理響應數據，以正確處理中文字符
+    final responseBody = utf8.decode(response.bodyBytes);
+    debugPrint('登入 API 完整響應內容: $responseBody');
+    
     if (response.statusCode == 200) {
-      // Use utf8.decode to properly handle Chinese characters
-      final responseBody = utf8.decode(response.bodyBytes);
       final userData = jsonDecode(responseBody);
+      
+      // 詳細記錄關鍵欄位
+      debugPrint('登入成功，用戶ID: ${userData['id']}');
+      debugPrint('用戶名稱: ${userData['name']}');
+      debugPrint('用戶暱稱: ${userData['nick_name']}');
+      debugPrint('審核狀態 (is_telegram_bot_enable): ${userData['is_telegram_bot_enable']}');
       
       // Save token if provided
       if (userData['token'] != null) {
@@ -48,18 +62,19 @@ class ApiService {
       } else {
         debugPrint('Warning: No token received from server');
       }
+      
       return User(
         id: userData['id'],
         phone: userData['phone'],
         name: userData['name'],
         nickName: userData['nick_name'],
         isLoggedIn: true,
+        isTelegramBotEnable: userData['is_telegram_bot_enable'] ?? false,
       );
     } else {
       // 解析錯誤訊息
       String errorMessage;
       try {
-        final responseBody = utf8.decode(response.bodyBytes);
         final errorData = jsonDecode(responseBody);
         errorMessage = errorData['error'] ?? '登入失敗';
         debugPrint('Login error: $errorMessage');

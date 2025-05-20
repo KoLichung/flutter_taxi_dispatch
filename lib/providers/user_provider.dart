@@ -50,7 +50,17 @@ class UserProvider extends ChangeNotifier {
     final userJson = prefs.getString('user');
     
     if (userJson != null) {
-      _user = User.fromJson(json.decode(userJson));
+      debugPrint('從SharedPreferences加載用戶數據: $userJson');
+      
+      final Map<String, dynamic> userData = json.decode(userJson);
+      debugPrint('用戶數據解析結果: $userData');
+      debugPrint('審核狀態 (is_telegram_bot_enable): ${userData['is_telegram_bot_enable']}');
+      
+      _user = User.fromJson(userData);
+      
+      debugPrint('加載後的用戶審核狀態: ${_user?.isTelegramBotEnable}');
+    } else {
+      debugPrint('SharedPreferences中沒有找到用戶數據');
     }
   }
 
@@ -149,8 +159,17 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> _saveUser() async {
     if (_user != null) {
+      debugPrint('正在保存用戶信息到SharedPreferences');
+      debugPrint('用戶ID: ${_user!.id}');
+      debugPrint('用戶審核狀態 (isTelegramBotEnable): ${_user!.isTelegramBotEnable}');
+      
+      final userJson = json.encode(_user!.toJson());
+      debugPrint('用戶JSON: $userJson');
+      
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user', json.encode(_user!.toJson()));
+      await prefs.setString('user', userJson);
+      
+      debugPrint('用戶信息已保存到SharedPreferences');
     }
   }
 

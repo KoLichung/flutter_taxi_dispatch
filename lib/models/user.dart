@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class User {
   final int? id;
   final String phone;
@@ -16,6 +18,9 @@ class User {
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    debugPrint('解析User JSON: is_telegram_bot_enable=${json['is_telegram_bot_enable']}');
+    debugPrint('用戶JSON完整數據: $json');
+    
     return User(
       id: json['id'],
       phone: json['phone'] ?? '',
