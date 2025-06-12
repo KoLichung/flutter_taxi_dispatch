@@ -1,9 +1,12 @@
+import 'package:flutter/foundation.dart';
+
 class User {
   final int? id;
   final String phone;
   final String? name;
   final String? nickName;
   final bool isLoggedIn;
+  final bool isTelegramBotEnable;
 
   User({
     this.id,
@@ -11,15 +14,20 @@ class User {
     this.name,
     this.nickName,
     this.isLoggedIn = false,
+    this.isTelegramBotEnable = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    debugPrint('解析User JSON: is_telegram_bot_enable=${json['is_telegram_bot_enable']}');
+    debugPrint('用戶JSON完整數據: $json');
+    
     return User(
       id: json['id'],
       phone: json['phone'] ?? '',
       name: json['name'],
       nickName: json['nick_name'] ?? json['nickName'],
       isLoggedIn: json['isLoggedIn'] ?? false,
+      isTelegramBotEnable: json['is_telegram_bot_enable'] ?? false,
     );
   }
 
@@ -30,6 +38,7 @@ class User {
       'name': name,
       'nick_name': nickName,
       'isLoggedIn': isLoggedIn,
+      'is_telegram_bot_enable': isTelegramBotEnable,
     };
   }
 
@@ -39,6 +48,7 @@ class User {
     String? name,
     String? nickName,
     bool? isLoggedIn,
+    bool? isTelegramBotEnable,
   }) {
     return User(
       id: id ?? this.id,
@@ -46,6 +56,7 @@ class User {
       name: name ?? this.name,
       nickName: nickName ?? this.nickName,
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
+      isTelegramBotEnable: isTelegramBotEnable ?? this.isTelegramBotEnable,
     );
   }
 } 

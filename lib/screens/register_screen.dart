@@ -1,33 +1,39 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/user_provider.dart';
-import 'register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  final _nameController = TextEditingController();
+  final _nickNameController = TextEditingController();
+  
   bool _isProcessing = false;
   bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
   String? _errorMessage;
 
   @override
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    _nameController.dispose();
+    _nickNameController.dispose();
     super.dispose();
   }
 
-  void _handleLogin() async {
-    // 添加日誌：開始登錄過程
-    debugPrint('開始登錄過程');
+  void _handleRegister() async {
+    debugPrint('開始註冊過程');
     
     if (_formKey.currentState!.validate()) {
       debugPrint('表單驗證通過');
@@ -37,36 +43,41 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       try {
-        debugPrint('嘗試調用 UserProvider.login');
+        debugPrint('嘗試調用 UserProvider.register');
         final userProvider = Provider.of<UserProvider>(context, listen: false);
         // 清除之前的錯誤
-        userProvider.clearLoginError();
+        userProvider.clearRegisterError();
         
-        // 呼叫新的 login 方法，它返回一個布爾值
-        bool success = await userProvider.login(
+        // 呼叫註冊方法
+        bool success = await userProvider.register(
           _phoneController.text,
           _passwordController.text,
+          _nameController.text,
+          _nickNameController.text,
         );
         
         if (success) {
-          debugPrint('登錄成功');
+          debugPrint('註冊成功');
+          if (mounted) {
+            // 註冊成功後返回登入頁面
+            Navigator.pop(context);
+          }
         } else {
-          // 登錄失敗，但錯誤已經由 UserProvider 處理
-          debugPrint('登錄失敗，錯誤由 UserProvider 處理');
+          // 註冊失敗
+          debugPrint('註冊失敗，錯誤由 UserProvider 處理');
           // 從 UserProvider 獲取錯誤消息
           setState(() {
-            _errorMessage = userProvider.loginError;
+            _errorMessage = userProvider.registerError;
           });
         }
       } catch (e) {
-        // 這裡不應該再有錯誤捕獲，因為錯誤已經在 UserProvider 中處理
         debugPrint('意外錯誤: $e');
       } finally {
         if (mounted) {
           setState(() {
             _isProcessing = false;
           });
-          debugPrint('登錄過程結束，_isProcessing 設置為 false');
+          debugPrint('註冊過程結束，_isProcessing 設置為 false');
         } else {
           debugPrint('組件已卸載，不更新狀態');
         }
@@ -75,53 +86,26 @@ class _LoginScreenState extends State<LoginScreen> {
       debugPrint('表單驗證失敗');
     }
   }
-  
-  void _navigateToRegister() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const RegisterScreen()),
-    );
-  }
-  
-  void _showInstructions() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('使用說明', style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('24H 叫車機器人使用如下：', style: TextStyle(fontWeight: FontWeight.bold)),
-                SizedBox(height: 8),
-                Text('1. 僅限高雄屏東地區'),
-                SizedBox(height: 4),
-                Text('2. 使用 上車：[地點] 叫車'),
-                Text('   例如：上車：高雄市苓雅區自強三路5號'),
-                SizedBox(height: 4),
-                Text('3. 用戶須註冊並審核後才可叫車'),
-                SizedBox(height: 4),
-                Text('4. 個人資料僅供此 APP 註冊使用，不做其他用途'),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('了解了'),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF469030),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          '註冊',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
@@ -131,16 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  '24H 叫車',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 32,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _phoneController,
                   decoration: InputDecoration(
@@ -213,6 +188,119 @@ class _LoginScreenState extends State<LoginScreen> {
                     if (value == null || value.isEmpty) {
                       return '請輸入密碼';
                     }
+                    if (value.length < 5) {
+                      return '密碼長度至少為5';
+                    }
+                    return null;
+                  },
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _confirmPasswordController,
+                  decoration: InputDecoration(
+                    labelText: '確認密碼',
+                    labelStyle: const TextStyle(color: Colors.white70),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white70),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white),
+                    ),
+                    prefixIcon: const Icon(Icons.lock_outline, color: Colors.white70),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscureConfirmPassword 
+                            ? Icons.visibility_off 
+                            : Icons.visibility,
+                        color: Colors.white70,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscureConfirmPassword = !_obscureConfirmPassword;
+                        });
+                      },
+                    ),
+                    filled: true,
+                    fillColor: Colors.white24,
+                  ),
+                  style: const TextStyle(color: Colors.white),
+                  obscureText: _obscureConfirmPassword,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return '請確認密碼';
+                    }
+                    if (value != _passwordController.text) {
+                      return '兩次密碼輸入不一致';
+                    }
+                    return null;
+                  },
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: '姓名',
+                    labelStyle: const TextStyle(color: Colors.white70),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white70),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white),
+                    ),
+                    prefixIcon: const Icon(Icons.person, color: Colors.white70),
+                    filled: true,
+                    fillColor: Colors.white24,
+                  ),
+                  style: const TextStyle(color: Colors.white),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return '請輸入姓名';
+                    }
+                    return null;
+                  },
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _nickNameController,
+                  decoration: InputDecoration(
+                    labelText: '暱稱',
+                    labelStyle: const TextStyle(color: Colors.white70),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white70),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Colors.white),
+                    ),
+                    prefixIcon: const Icon(Icons.face, color: Colors.white70),
+                    filled: true,
+                    fillColor: Colors.white24,
+                  ),
+                  style: const TextStyle(color: Colors.white),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return '請輸入暱稱';
+                    }
                     return null;
                   },
                 ),
@@ -245,7 +333,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 const SizedBox(height: 32),
                 ElevatedButton(
-                  onPressed: _isProcessing ? null : _handleLogin,
+                  onPressed: _isProcessing ? null : _handleRegister,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.white,
                     foregroundColor: const Color(0xFF469030),
@@ -264,36 +352,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         )
                       : const Text(
-                          '登入',
+                          '註冊',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _navigateToRegister,
-                  child: const Text(
-                    '註冊',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _showInstructions,
-                  child: const Text(
-                    '說明',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
                 ),
               ],
             ),

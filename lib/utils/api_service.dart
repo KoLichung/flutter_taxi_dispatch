@@ -26,6 +26,9 @@ class ApiService {
   
   // Authentication API
   static Future<User> login(String phone, String password) async {
+    debugPrint('開始發送登入請求到: $baseUrl/api/dispatch/login/');
+    debugPrint('請求參數: phone=$phone, password=***');
+    
     final response = await http.post(
       Uri.parse('$baseUrl/api/dispatch/login/'),
       headers: {'Content-Type': 'application/json'},
@@ -35,10 +38,21 @@ class ApiService {
       }),
     );
     
+    debugPrint('登入 API 響應狀態碼: ${response.statusCode}');
+    debugPrint('登入 API 響應標頭: ${response.headers}');
+    
+    // 使用utf8.decode處理響應數據，以正確處理中文字符
+    final responseBody = utf8.decode(response.bodyBytes);
+    debugPrint('登入 API 完整響應內容: $responseBody');
+    
     if (response.statusCode == 200) {
-      // Use utf8.decode to properly handle Chinese characters
-      final responseBody = utf8.decode(response.bodyBytes);
       final userData = jsonDecode(responseBody);
+      
+      // 詳細記錄關鍵欄位
+      debugPrint('登入成功，用戶ID: ${userData['id']}');
+      debugPrint('用戶名稱: ${userData['name']}');
+      debugPrint('用戶暱稱: ${userData['nick_name']}');
+      debugPrint('審核狀態 (is_telegram_bot_enable): ${userData['is_telegram_bot_enable']}');
       
       // Save token if provided
       if (userData['token'] != null) {
@@ -48,18 +62,19 @@ class ApiService {
       } else {
         debugPrint('Warning: No token received from server');
       }
+      
       return User(
         id: userData['id'],
         phone: userData['phone'],
         name: userData['name'],
         nickName: userData['nick_name'],
         isLoggedIn: true,
+        isTelegramBotEnable: userData['is_telegram_bot_enable'] ?? false,
       );
     } else {
       // 解析錯誤訊息
       String errorMessage;
       try {
-        final responseBody = utf8.decode(response.bodyBytes);
         final errorData = jsonDecode(responseBody);
         errorMessage = errorData['error'] ?? '登入失敗';
         debugPrint('Login error: $errorMessage');
@@ -78,6 +93,67 @@ class ApiService {
           throw Exception(errorMessage); // 直接使用服務器返回的錯誤訊息，如"您沒有派單的權限"
         default:
           throw Exception('登入失敗: ${response.statusCode}');
+      }
+    }
+  }
+  
+  static Future<User> register(String phone, String password, String name, String nickName) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/user/create/'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'phone': phone,
+        'password': password,
+        'name': name,
+        'nick_name': nickName,
+        'car_team': 1,  // 固定為 1
+      }),
+    );
+    
+    if (response.statusCode == 201) {
+      // 註冊成功後自動登入
+      return await login(phone, password);
+    } else {
+      // 解析錯誤訊息
+      String errorMessage;
+      try {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final errorData = jsonDecode(responseBody);
+        
+        // API可能返回不同格式的錯誤
+        if (errorData['error'] != null) {
+          errorMessage = errorData['error'];
+        } else if (errorData['detail'] != null) {
+          errorMessage = errorData['detail'];
+        } else if (errorData is Map) {
+          // 可能是欄位錯誤
+          final fieldErrors = <String>[];
+          errorData.forEach((key, value) {
+            if (value is List && value.isNotEmpty) {
+              fieldErrors.add('$key: ${value.join(', ')}');
+            } else if (value is String) {
+              fieldErrors.add('$key: $value');
+            }
+          });
+          errorMessage = fieldErrors.join('\n');
+        } else {
+          errorMessage = '註冊失敗';
+        }
+        
+        debugPrint('Registration error: $errorMessage');
+      } catch (e) {
+        errorMessage = '註冊失敗';
+        debugPrint('Cannot parse error response: $e');
+      }
+      
+      // 根據狀態碼返回不同錯誤
+      switch (response.statusCode) {
+        case 400:
+          throw Exception(errorMessage);
+        case 409:
+          throw Exception('此手機號碼已被使用');
+        default:
+          throw Exception('註冊失敗: ${response.statusCode}');
       }
     }
   }
@@ -171,6 +247,83 @@ class ApiService {
       throw Exception('發送訊息逾時，請檢查網路連線');
     } catch (e) {
       debugPrint('Error in sendMessage: $e');
+      rethrow;
+    }
+  }
+  
+  static Future<void> deleteUser() async {
+    final headers = await _getHeaders();
+    try {
+      // 首先獲取當前用戶的ID
+      final prefs = await SharedPreferences.getInstance();
+      final userJson = prefs.getString('user');
+      
+      if (userJson == null) {
+        throw Exception('找不到用戶信息，無法刪除用戶');
+      }
+      
+      final userData = jsonDecode(userJson);
+      final userId = userData['id'];
+      
+      if (userId == null) {
+        throw Exception('用戶ID不存在，無法刪除用戶');
+      }
+      
+      debugPrint('正在發送刪除用戶請求到: $baseUrl/api/user/deleteuser/$userId/');
+      debugPrint('請求標頭: $headers');
+      
+      final response = await http.delete(
+        Uri.parse('$baseUrl/api/user/deleteuser/$userId/'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('刪除用戶 API 響應狀態碼: ${response.statusCode}');
+      debugPrint('刪除用戶 API 響應標頭: ${response.headers}');
+      
+      // 記錄完整的回應數據，以便診斷問題
+      final responseBody = utf8.decode(response.bodyBytes);
+      debugPrint('刪除用戶 API 完整響應內容: $responseBody');
+      
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        debugPrint('刪除用戶成功，正在清除本地存儲');
+        // 刪除成功，清除本地存儲的 token 和用戶信息
+        await prefs.remove('token');
+        await prefs.remove('user');
+        debugPrint('本地存儲清除完成');
+        return;
+      } else {
+        // 解析錯誤訊息
+        String errorMessage;
+        try {
+          final errorData = jsonDecode(responseBody);
+          errorMessage = errorData['error'] ?? errorData['detail'] ?? '刪除用戶失敗';
+          debugPrint('解析的錯誤消息: $errorMessage');
+        } catch (e) {
+          errorMessage = '刪除用戶失敗: ${response.statusCode}';
+          debugPrint('無法解析錯誤響應: $e');
+          debugPrint('原始響應內容: $responseBody');
+          
+          // 檢查是否為 HTML 回應，這通常是伺服器錯誤的徵兆
+          if (responseBody.trim().startsWith('<!DOCTYPE') || responseBody.trim().startsWith('<html')) {
+            debugPrint('伺服器返回了 HTML 內容，可能是服務器端錯誤或 API 路徑不正確');
+            errorMessage = '刪除用戶失敗: 伺服器錯誤 (${response.statusCode})';
+          }
+        }
+        
+        throw Exception(errorMessage);
+      }
+    } on TimeoutException {
+      debugPrint('刪除用戶請求超時');
+      throw Exception('刪除用戶逾時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('刪除用戶發生錯誤: $e');
+      
+      if (e is FormatException) {
+        debugPrint('格式錯誤: $e');
+      } else if (e is http.ClientException) {
+        debugPrint('HTTP 客戶端錯誤: $e');
+      }
+      
       rethrow;
     }
   }

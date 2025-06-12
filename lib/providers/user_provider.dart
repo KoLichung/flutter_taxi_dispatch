@@ -9,15 +9,24 @@ class UserProvider extends ChangeNotifier {
   User? _user;
   bool _isLoading = false;
   String? _loginError;
+  String? _registerError;
 
   User? get user => _user;
   bool get isLoading => _isLoading;
   bool get isLoggedIn => _user != null && _user!.isLoggedIn;
   String? get loginError => _loginError;
+  String? get registerError => _registerError;
 
   void clearLoginError() {
     if (_loginError != null) {
       _loginError = null;
+      notifyListeners();
+    }
+  }
+
+  void clearRegisterError() {
+    if (_registerError != null) {
+      _registerError = null;
       notifyListeners();
     }
   }
@@ -41,7 +50,17 @@ class UserProvider extends ChangeNotifier {
     final userJson = prefs.getString('user');
     
     if (userJson != null) {
-      _user = User.fromJson(json.decode(userJson));
+      debugPrint('從SharedPreferences加載用戶數據: $userJson');
+      
+      final Map<String, dynamic> userData = json.decode(userJson);
+      debugPrint('用戶數據解析結果: $userData');
+      debugPrint('審核狀態 (is_telegram_bot_enable): ${userData['is_telegram_bot_enable']}');
+      
+      _user = User.fromJson(userData);
+      
+      debugPrint('加載後的用戶審核狀態: ${_user?.isTelegramBotEnable}');
+    } else {
+      debugPrint('SharedPreferences中沒有找到用戶數據');
     }
   }
 
@@ -64,6 +83,36 @@ class UserProvider extends ChangeNotifier {
       }
       
       _loginError = errorMsg;
+      
+      _showErrorSnackBar(errorMsg);
+      
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> register(String phone, String password, String name, String nickName) async {
+    _isLoading = true;
+    _registerError = null;
+    notifyListeners();
+
+    try {
+      final user = await ApiConfig.register(phone, password, name, nickName);
+      // 註冊成功後自動登入
+      _user = user;
+      await _saveUser();
+      return true;
+    } catch (e) {
+      debugPrint('Error registering: $e');
+      
+      String errorMsg = e.toString();
+      if (errorMsg.startsWith('Exception: ')) {
+        errorMsg = errorMsg.substring('Exception: '.length);
+      }
+      
+      _registerError = errorMsg;
       
       _showErrorSnackBar(errorMsg);
       
@@ -110,8 +159,53 @@ class UserProvider extends ChangeNotifier {
 
   Future<void> _saveUser() async {
     if (_user != null) {
+      debugPrint('正在保存用戶信息到SharedPreferences');
+      debugPrint('用戶ID: ${_user!.id}');
+      debugPrint('用戶審核狀態 (isTelegramBotEnable): ${_user!.isTelegramBotEnable}');
+      
+      final userJson = json.encode(_user!.toJson());
+      debugPrint('用戶JSON: $userJson');
+      
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('user', json.encode(_user!.toJson()));
+      await prefs.setString('user', userJson);
+      
+      debugPrint('用戶信息已保存到SharedPreferences');
+    }
+  }
+
+  Future<bool> deleteUser() async {
+    _isLoading = true;
+    notifyListeners();
+    debugPrint('開始處理用戶刪除請求');
+
+    try {
+      debugPrint('調用 ApiConfig.deleteUser()');
+      await ApiConfig.deleteUser();
+      debugPrint('API 刪除用戶請求成功');
+      
+      debugPrint('清除本地用戶狀態');
+      _user = null;
+      // 用戶已自動登出
+      
+      debugPrint('用戶刪除流程完成');
+      return true;
+    } catch (e) {
+      debugPrint('刪除用戶發生錯誤: $e');
+      
+      String errorMsg = e.toString();
+      if (errorMsg.startsWith('Exception: ')) {
+        errorMsg = errorMsg.substring('Exception: '.length);
+        debugPrint('格式化錯誤訊息: $errorMsg');
+      }
+      
+      debugPrint('顯示錯誤訊息');
+      _showErrorSnackBar(errorMsg);
+      
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+      debugPrint('刪除用戶處理完成，通知 UI 更新');
     }
   }
 } 

@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'profile_screen.dart';
 
 class MessageScreen extends StatefulWidget {
   const MessageScreen({super.key});
@@ -324,10 +325,19 @@ class _MessageScreenState extends State<MessageScreen> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('24H 派車 - ${userProvider.user?.nickName ?? '用戶'}'),
+          title: Text('24H 叫車 - ${userProvider.user?.nickName ?? '用戶'}'),
           centerTitle: true,  // Center the title
           backgroundColor: const Color(0xFF469030),
           foregroundColor: Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.account_circle),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+          ),
           actions: [
             IconButton(
               icon: const Icon(Icons.exit_to_app),
