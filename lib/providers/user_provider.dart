@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../utils/api_config.dart';
+import '../utils/push_notification_service.dart';
 import '../main.dart';  // 引入 main.dart 以使用 navigatorKey
 
 class UserProvider extends ChangeNotifier {
@@ -73,6 +74,17 @@ class UserProvider extends ChangeNotifier {
       final user = await ApiConfig.login(phone, password);
       _user = user;
       await _saveUser();
+      
+      // 確保等待一下，讓 token 完全保存
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // 登入成功後嘗試註冊 FCM 設備
+      try {
+        await PushNotificationService.registerFCMDevice();
+      } catch (e) {
+        debugPrint('FCM 設備註冊失敗，但不影響登入: $e');
+      }
+      
       return true;
     } catch (e) {
       debugPrint('Error logging in: $e');
@@ -208,4 +220,6 @@ class UserProvider extends ChangeNotifier {
       debugPrint('刪除用戶處理完成，通知 UI 更新');
     }
   }
+
+
 } 

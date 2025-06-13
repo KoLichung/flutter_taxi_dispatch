@@ -1,15 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/message_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/message_screen.dart';
 import 'screens/message_screen_animatedlist.dart';
+import 'utils/push_notification_service.dart';
 
 // 創建一個全局 NavigatorKey
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // 強制限制為直向
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+  
+  // 初始化推播服務
+  try {
+    await PushNotificationService.initialize();
+  } catch (e) {
+    debugPrint('推播服務初始化失敗: $e');
+    // 即使推播初始化失敗，app 仍可正常運作
+  }
+  
   runApp(const MyApp());
 }
 
@@ -42,6 +60,9 @@ class MyApp extends StatelessWidget {
                 : const LoginScreen();
           },
         ),
+        routes: {
+          '/message': (context) => const MessageScreen(),
+        },
       ),
     );
   }

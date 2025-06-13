@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
@@ -327,4 +328,50 @@ class ApiService {
       rethrow;
     }
   }
+
+  // FCM 設備註冊
+  static Future<Map<String, dynamic>> registerFCMDevice({
+    required String registrationId,
+    required String deviceId,
+    String? type,  // 改為可選參數，讓函數內部自動判斷
+    String name = '24_dispatch',  // 固定為總機app
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token');
+    
+    if (token == null) {
+      throw Exception('用戶未登入');
+    }
+
+    // 如果沒有提供 type，根據平台自動判斷
+    String deviceType = type ?? (Platform.isAndroid ? 'android' : 'ios');
+
+    debugPrint('註冊 FCM 設備: deviceId=$deviceId, type=$deviceType, name=$name');
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/fcm/device_register'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Token $token',
+      },
+      body: json.encode({
+        'registration_id': registrationId,
+        'device_id': deviceId,
+        'type': deviceType,
+        'name': name,
+      }),
+    );
+
+    debugPrint('FCM 註冊回應狀態: ${response.statusCode}');
+    debugPrint('FCM 註冊回應內容: ${response.body}');
+
+    if (response.statusCode == 200) {
+      return json.decode(response.body);
+    } else {
+      final errorBody = json.decode(response.body);
+      throw Exception(errorBody['message'] ?? 'FCM 設備註冊失敗');
+    }
+  }
+
+
 } 

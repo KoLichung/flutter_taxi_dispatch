@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import '../models/message.dart';
 import '../utils/api_config.dart';
+import '../utils/push_notification_service.dart';
 
 class MessageProvider extends ChangeNotifier {
   List<Message> _messages = [];
@@ -219,41 +220,66 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendMessage(String content) async {
+  Future<void> sendMessage(String content, {bool isFromServer = false}) async {
     try {
-      // 創建臨時訊息（沒有 ID）
+      debugPrint('發送訊息: $content');
+      
+      // Create a temporary message immediately
       final tempMessage = Message(
-        id: -1, // 使用負數 ID 表示臨時訊息
+        id: -1,  // Use -1 as a temporary ID
         content: content,
+        isFromServer: isFromServer,
         createdAt: DateTime.now(),
-        isFromServer: false,
       );
       
-      // 先添加到本地列表
+      // Add the temporary message to the list immediately
       _messages.insert(0, tempMessage);
       notifyListeners();
       
-      // 發送到服務器
-      final response = await ApiConfig.sendMessage(content);
+      // Send the message to the server
+      final response = await ApiConfig.sendMessage(content, isFromServer: isFromServer);
       
-      // 檢查 response 是否包含錯誤信息
-      if (response.containsKey('error')) {
-        // 發送失敗，移除臨時訊息
-        _messages.removeAt(0);
-        notifyListeners();
-        throw Exception('發送訊息失敗: ${response['error']}');
-      }
+      debugPrint('訊息發送成功: ${response['message']}');
       
-      // 發送成功後，立即獲取最新訊息
-      await fetchMessages(refresh: true);
+      // 等待一下再獲取最新訊息，確保服務器已處理
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Fetch messages to get the real message from server
+      await fetchMessages(refresh: false);
       
     } catch (e) {
-      // 發送失敗，移除臨時訊息
+      debugPrint('Error sending message: $e');
+      
+      // Remove the temporary message if sending failed
       if (_messages.isNotEmpty && _messages[0].id == -1) {
         _messages.removeAt(0);
         notifyListeners();
       }
-      throw Exception('發送訊息失敗: $e');
+      
+      rethrow;
+    }
+  }
+
+
+
+  // 處理收到的推播通知
+  void handleReceivedPushNotification(Map<String, dynamic> data) {
+    final type = data['type'] ?? 'general';
+    
+    switch (type) {
+      case 'new_message':
+        debugPrint('收到新訊息推播，重新載入訊息');
+        fetchMessages(refresh: true);
+        break;
+      case 'system_notification':
+        debugPrint('收到系統通知推播');
+        // 可以在這裡處理系統通知的特殊邏輯
+        break;
+      default:
+        debugPrint('收到一般推播通知: $data');
+        // 預設行為：重新載入訊息
+        fetchMessages(refresh: false);
+        break;
     }
   }
 } 

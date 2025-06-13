@@ -39,6 +39,10 @@ dependencies:
   http: ^1.2.0
   intl: ^0.19.0
   url_launcher: ^6.2.5
+  # Firebase 推播相關套件
+  firebase_core: ^2.24.2
+  firebase_messaging: ^14.7.9
+  device_info_plus: ^10.1.2
 
 dev_dependencies:
   flutter_test:

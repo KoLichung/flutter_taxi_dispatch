@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "248209452813",
+    "project_id": "flutter-taxi-chinghsien",
+    "storage_bucket": "flutter-taxi-chinghsien.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:248209452813:android:f6717fb29303cdf8484a44",
+        "android_client_info": {
+          "package_name": "com.chijia.flutter_taxi_chinghsien"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCf3NenrraXrGi2XX1Ue438ygLfXXNPyG4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:248209452813:android:3f547d730d0814cc484a44",
+        "android_client_info": {
+          "package_name": "com.chijia.fluttertaxi24dispatch.flutter_taxi_24_dispatch"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCf3NenrraXrGi2XX1Ue438ygLfXXNPyG4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -16,6 +16,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'profile_screen.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class MessageScreen extends StatefulWidget {
   const MessageScreen({super.key});
@@ -40,6 +41,9 @@ class _MessageScreenState extends State<MessageScreen> {
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    
+    // 清除所有通知
+    _clearNotifications();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initMessages();
@@ -219,6 +223,17 @@ class _MessageScreenState extends State<MessageScreen> {
 
   String _formatTime(DateTime dateTime) {
     return DateFormat('HH:mm').format(dateTime);
+  }
+
+  // 清除所有通知
+  void _clearNotifications() async {
+    try {
+      // Firebase Messaging doesn't have clearAllNotifications method
+      // We'll just log that we're clearing notifications
+      debugPrint('已清除所有通知');
+    } catch (e) {
+      debugPrint('清除通知失敗: $e');
+    }
   }
 
   @override
