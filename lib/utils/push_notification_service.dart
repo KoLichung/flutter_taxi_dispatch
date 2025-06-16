@@ -192,32 +192,9 @@ class PushNotificationService {
     debugPrint('推播內容: ${message.notification?.body}');
     debugPrint('推播資料: ${message.data}');
     
-    // 檢查是否在訊息畫面
-    debugPrint('檢查當前路由狀態:');
-    debugPrint('navigatorKey.currentContext 是否為 null: ${navigatorKey.currentContext == null}');
-    
-    if (navigatorKey.currentContext != null) {
-      final context = navigatorKey.currentContext!;
-      final currentRoute = ModalRoute.of(context);
-      debugPrint('當前路由名稱: ${currentRoute?.settings.name}');
-      debugPrint('當前路由是否為 null: ${currentRoute == null}');
-      
-      final isInMessageScreen = currentRoute?.settings.name == '/message';
-      debugPrint('是否在訊息畫面: $isInMessageScreen');
-      
-      // 在前景顯示通知，但不在訊息畫面時才顯示
-      if (message.notification != null && !isInMessageScreen) {
-        debugPrint('準備顯示前景通知，因為不在訊息畫面');
-        showForegroundNotification(message);
-      } else {
-        debugPrint('不顯示前景通知，原因: ${message.notification == null ? "沒有通知內容" : "在訊息畫面中"}');
-      }
-    } else {
-      debugPrint('navigatorKey.currentContext 為 null，無法檢查當前路由');
-    }
-    
     // 在前景收到推播時，直接處理資料並重新載入訊息
     if (message.data.isNotEmpty) {
+      debugPrint('在前景收到推播，直接處理資料');
       refreshMessages();
     }
   }
