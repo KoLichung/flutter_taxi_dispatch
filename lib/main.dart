@@ -50,18 +50,20 @@ class MyApp extends StatelessWidget {
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF469030)),
           useMaterial3: true,
         ),
-        home: Consumer<UserProvider>(
-          builder: (context, userProvider, _) {
-            if (userProvider.isLoading) {
-              return const SplashScreen();
-            }
-            return userProvider.isLoggedIn
-                ? const MessageScreen()
-                : const LoginScreen();
-          },
-        ),
+        initialRoute: '/',
         routes: {
+          '/': (context) => Consumer<UserProvider>(
+            builder: (context, userProvider, _) {
+              if (userProvider.isLoading) {
+                return const SplashScreen();
+              }
+              return userProvider.isLoggedIn
+                  ? const MessageScreen()
+                  : const LoginScreen();
+            },
+          ),
           '/message': (context) => const MessageScreen(),
+          '/login': (context) => const LoginScreen(),
         },
       ),
     );
