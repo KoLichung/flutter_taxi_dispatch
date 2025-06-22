@@ -222,7 +222,7 @@ class _MessageScreenState extends State<MessageScreen> {
   }
 
   String _formatTime(DateTime dateTime) {
-    return DateFormat('HH:mm').format(dateTime);
+    return DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 8)));
   }
 
   // 清除所有通知

@@ -41,8 +41,8 @@ import UserNotifications
     willPresent notification: UNNotification,
     withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
   ) {
-    // 在前景顯示通知，包含聲音
-    completionHandler([.banner, .sound, .badge])
+    // 在前景時不顯示通知
+    completionHandler([])
   }
 }
 

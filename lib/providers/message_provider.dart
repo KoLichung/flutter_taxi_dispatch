@@ -229,7 +229,7 @@ class MessageProvider extends ChangeNotifier {
         id: -1,  // Use -1 as a temporary ID
         content: content,
         isFromServer: isFromServer,
-        createdAt: DateTime.now(),
+        createdAt: DateTime.now().subtract(const Duration(hours: 8)),
       );
       
       // Add the temporary message to the list immediately

@@ -49,9 +49,9 @@ class PushNotificationService {
       
       // 設定預設通知聲音
       await messaging.setForegroundNotificationPresentationOptions(
-        alert: true,
-        badge: true,
-        sound: true,
+        alert: false,
+        badge: false,
+        sound: false,
       );
       
       // 監聽 token 變化（包括 APNS token 可用時）
