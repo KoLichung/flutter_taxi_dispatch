@@ -36,6 +36,9 @@ class _MessageScreenState extends State<MessageScreen> {
   
   // Flag to track if the initial scroll to bottom has been done
   bool _initialScrollDone = false;
+  
+  // 全域變數存儲 EditableTextState
+  EditableTextState? _currentEditableTextState;
 
   @override
   void initState() {
@@ -234,6 +237,157 @@ class _MessageScreenState extends State<MessageScreen> {
     } catch (e) {
       debugPrint('清除通知失敗: $e');
     }
+  }
+
+  // 自定義文字選擇選單
+  Widget _buildContextMenu(BuildContext context, EditableTextState editableTextState) {
+    final List<ContextMenuButtonItem> buttonItems = [];
+    final TextEditingController controller = editableTextState.widget.controller!;
+    final TextSelection selection = editableTextState.currentTextEditingValue.selection;
+
+    // 只有在沒有選中文字時，才顯示"全選"和"選取"按鈕
+    if (selection.isCollapsed) {
+      // 全選
+      if (controller.text.isNotEmpty) {
+        buttonItems.add(
+          ContextMenuButtonItem(
+            label: '全選',
+            onPressed: () {
+              controller.selection = TextSelection(
+                baseOffset: 0,
+                extentOffset: controller.text.length,
+              );
+              // 不立即隱藏菜單，等待菜單自動更新
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                // 延遲一點再重新顯示菜單，確保選中狀態已更新
+                Future.delayed(const Duration(milliseconds: 50), () {
+                  if (editableTextState.mounted) {
+                    editableTextState.showToolbar();
+                  }
+                });
+              });
+            },
+          ),
+        );
+      }
+
+      if (controller.text.isNotEmpty) {
+        buttonItems.add(
+          ContextMenuButtonItem(
+            label: '選擇',
+            onPressed: () {
+              final cursorOffset = selection.baseOffset;
+              final text = controller.text;
+              
+              // 找到當前游標位置所在行的開始位置
+              int lineStart = cursorOffset;
+              while (lineStart > 0 && text[lineStart - 1] != '\n') {
+                lineStart--;
+              }
+              
+              // 找到當前行的結束位置（下一個換行符或文字結尾）
+              int lineEnd = cursorOffset;
+              while (lineEnd < text.length && text[lineEnd] != '\n') {
+                lineEnd++;
+              }
+              
+              // 選擇整行
+              controller.selection = TextSelection(
+                baseOffset: lineStart,
+                extentOffset: lineEnd,
+              );
+              // 不立即隱藏菜單，等待菜單自動更新
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                // 延遲一點再重新顯示菜單，確保選中狀態已更新
+                Future.delayed(const Duration(milliseconds: 50), () {
+                  if (editableTextState.mounted) {
+                    editableTextState.showToolbar();
+                  }
+                });
+              });
+            },
+          ),
+        );
+      }
+    }
+
+    // 複製 (當有選中文字時)
+    if (!selection.isCollapsed && selection.textInside(controller.text).isNotEmpty) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          label: '複製',
+          onPressed: () {
+            Clipboard.setData(ClipboardData(text: selection.textInside(controller.text)));
+            ContextMenuController.removeAny();
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('已複製到剪貼簿'),
+                duration: Duration(milliseconds: 100),
+              ),
+            );
+          },
+        ),
+      );
+    }
+
+    // 剪下 (當有選中文字時)
+    if (!selection.isCollapsed && selection.textInside(controller.text).isNotEmpty) {
+      buttonItems.add(
+        ContextMenuButtonItem(
+          label: '剪下',
+          onPressed: () {
+            final selectedText = selection.textInside(controller.text);
+            Clipboard.setData(ClipboardData(text: selectedText));
+            
+            // 刪除選中的文字
+            final newText = controller.text.replaceRange(
+              selection.start,
+              selection.end,
+              '',
+            );
+            controller.text = newText;
+            controller.selection = TextSelection.collapsed(offset: selection.start);
+            
+            ContextMenuController.removeAny();
+            // ScaffoldMessenger.of(context).showSnackBar(
+            //   const SnackBar(
+            //     content: Text('已剪下到剪貼簿'),
+            //     duration: Duration(milliseconds: 800),
+            //   ),
+            // );
+          },
+        ),
+      );
+    }
+
+    // 貼上 (當剪貼簿有內容時)
+    buttonItems.add(
+      ContextMenuButtonItem(
+        label: '貼上',
+        onPressed: () async {
+          final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+          if (clipboardData?.text != null) {
+            final text = clipboardData!.text!;
+            final newText = controller.text.replaceRange(
+              selection.start,
+              selection.end,
+              text,
+            );
+            controller.text = newText;
+            controller.selection = TextSelection.collapsed(
+              offset: selection.start + text.length,
+            );
+            
+            ContextMenuController.removeAny();
+          }
+        },
+      ),
+    );
+
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
+    );
   }
 
   @override
@@ -477,24 +631,62 @@ class _MessageScreenState extends State<MessageScreen> {
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _messageController,
-              decoration: InputDecoration(
-                hintText: '輸入訊息...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
+            child: GestureDetector(
+              onDoubleTap: () {
+                // 雙擊選擇當前行
+                if (_messageController.text.isNotEmpty) {
+                  final cursorOffset = _messageController.selection.baseOffset;
+                  final text = _messageController.text;
+                  
+                  // 找到當前游標位置所在行的開始位置
+                  int lineStart = cursorOffset;
+                  while (lineStart > 0 && text[lineStart - 1] != '\n') {
+                    lineStart--;
+                  }
+                  
+                  // 找到當前行的結束位置（下一個換行符或文字結尾）
+                  int lineEnd = cursorOffset;
+                  while (lineEnd < text.length && text[lineEnd] != '\n') {
+                    lineEnd++;
+                  }
+                  
+                  // 選擇整行
+                  _messageController.selection = TextSelection(
+                    baseOffset: lineStart,
+                    extentOffset: lineEnd,
+                  );
+                  
+                  // 雙擊後顯示菜單
+                  Future.delayed(const Duration(milliseconds: 50), () {
+                    if (_currentEditableTextState != null && _currentEditableTextState!.mounted) {
+                      _currentEditableTextState!.showToolbar();
+                    }
+                  });
+                }
+              },
+              child: TextField(
+                controller: _messageController,
+                decoration: InputDecoration(
+                  hintText: '輸入訊息...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: BorderSide.none,
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 12,
+                  ),
                 ),
-                filled: true,
-                fillColor: Colors.grey.shade100,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 18,
-                  vertical: 12,
-                ),
+                textInputAction: TextInputAction.newline,
+                keyboardType: TextInputType.multiline,
+                maxLines: null,
+                contextMenuBuilder: (context, editableTextState) {
+                  _currentEditableTextState = editableTextState;
+                  return _buildContextMenu(context, _currentEditableTextState!);
+                },
               ),
-              textInputAction: TextInputAction.newline,
-              keyboardType: TextInputType.multiline,
-              maxLines: null,
             ),
           ),
           const SizedBox(width: 12),
