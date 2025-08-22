@@ -17,12 +17,14 @@ class ApiService {
     if (token == null) {
       debugPrint('Warning: No token found in SharedPreferences');
     } else {
-      // debugPrint('Using token: $token');
+      debugPrint('Using token: ${token.substring(0, 10)}...');
     }
-    return {
+    final headers = {
       'Content-Type': 'application/json',
       if (token != null) 'Authorization': 'Token $token',
     };
+    debugPrint('Generated headers: ${headers.keys.join(', ')}');
+    return headers;
   }
   
   // Authentication API
@@ -248,6 +250,90 @@ class ApiService {
       throw Exception('發送訊息逾時，請檢查網路連線');
     } catch (e) {
       debugPrint('Error in sendMessage: $e');
+      rethrow;
+    }
+  }
+  
+  // Search Messages API
+  static Future<Map<String, dynamic>> searchMessages(String query, {int page = 1, int pageSize = 20}) async {
+    final headers = await _getHeaders();
+    try {
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final url = Uri.parse('$baseUrl/api/dispatch/messages/?q=${Uri.encodeComponent(query)}');
+      
+      // 詳細記錄請求信息
+      debugPrint('=== Search Messages API Request ===');
+      debugPrint('URL: ${url.toString()}');
+      debugPrint('Method: GET');
+      debugPrint('Query: "$query"');
+      debugPrint('Encoded Query: "${Uri.encodeComponent(query)}"');
+      
+      final requestHeaders = {
+        ...headers,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      };
+      
+      debugPrint('Request Headers:');
+      requestHeaders.forEach((key, value) {
+        if (key == 'Authorization') {
+          debugPrint('  $key: ${value.substring(0, 15)}...'); // 只顯示部分token
+        } else {
+          debugPrint('  $key: $value');
+        }
+      });
+      debugPrint('=====================================');
+      
+      final response = await http.get(
+        url,
+        headers: requestHeaders,
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('=== Search Messages API Response ===');
+      debugPrint('Status Code: ${response.statusCode}');
+      debugPrint('Response Headers: ${response.headers}');
+      
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        debugPrint('Response Body Length: ${responseBody.length} bytes');
+        final decodedResponse = jsonDecode(responseBody);
+        
+        // 新的API回應格式：直接返回訊息數組
+        if (decodedResponse is List) {
+          debugPrint('Search completed: found ${decodedResponse.length} messages');
+          debugPrint('====================================');
+          
+          // 轉換為與其他API一致的格式
+          return {
+            'count': decodedResponse.length,
+            'results': decodedResponse,
+          };
+        } else {
+          // 如果不是數組，可能是舊格式，直接返回
+          debugPrint('Search completed: found ${decodedResponse['results']?.length ?? 0} messages');
+          debugPrint('Total count: ${decodedResponse['count'] ?? 'unknown'}');
+          debugPrint('====================================');
+          return decodedResponse;
+        }
+      } else {
+        final responseBody = utf8.decode(response.bodyBytes);
+        debugPrint('Error Response Body: $responseBody');
+        debugPrint('====================================');
+        
+        if (response.statusCode == 401) {
+          throw Exception('搜索訊息失敗: 401 - 請重新登入');
+        } else if (response.statusCode == 403) {
+          throw Exception('搜索訊息失敗: 403 - 權限不足或認證失敗');
+        } else {
+          throw Exception('搜索訊息失敗: ${response.statusCode}');
+        }
+      }
+    } on TimeoutException {
+      debugPrint('API request timed out when searching messages');
+      throw Exception('搜索訊息逾時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('Error in searchMessages: $e');
       rethrow;
     }
   }

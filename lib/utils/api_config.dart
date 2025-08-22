@@ -28,6 +28,10 @@ class ApiConfig {
     return ApiService.sendMessage(content, isFromServer: isFromServer);
   }
   
+  static Future<Map<String, dynamic>> searchMessages(String query, {int page = 1, int pageSize = 20}) {
+    return ApiService.searchMessages(query, page: page, pageSize: pageSize);
+  }
+  
   static Future<void> deleteUser() {
     debugPrint('準備調用刪除用戶 API: 使用路徑 api/user/deleteuser/{用戶ID}/');
     return ApiService.deleteUser();

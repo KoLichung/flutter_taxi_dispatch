@@ -16,13 +16,14 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'profile_screen.dart';
+import 'search_message_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 class MessageScreen extends StatefulWidget {
   const MessageScreen({super.key});
 
   @override
-  _MessageScreenState createState() => _MessageScreenState();
+  State<MessageScreen> createState() => _MessageScreenState();
 }
 
 class _MessageScreenState extends State<MessageScreen> {
@@ -508,6 +509,15 @@ class _MessageScreenState extends State<MessageScreen> {
             },
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SearchMessageScreen()),
+                );
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.exit_to_app),
               onPressed: () async {
