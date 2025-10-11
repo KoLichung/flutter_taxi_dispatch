@@ -43,6 +43,10 @@ dependencies:
   firebase_core: ^2.24.2
   firebase_messaging: ^14.7.9
   device_info_plus: ^10.1.2
+  # 案件訊息相關套件
+  badges: ^3.1.2
+  image_picker: ^1.0.7
+  collection: ^1.18.0
 
 dev_dependencies:
   flutter_test:

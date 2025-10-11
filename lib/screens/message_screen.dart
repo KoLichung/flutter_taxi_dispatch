@@ -17,7 +17,10 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'profile_screen.dart';
 import 'search_message_screen.dart';
+import 'case_message_list_screen.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:badges/badges.dart' as badges;
+import '../main.dart' show routeObserver;
 
 class MessageScreen extends StatefulWidget {
   const MessageScreen({super.key});
@@ -26,7 +29,7 @@ class MessageScreen extends StatefulWidget {
   State<MessageScreen> createState() => _MessageScreenState();
 }
 
-class _MessageScreenState extends State<MessageScreen> {
+class _MessageScreenState extends State<MessageScreen> with RouteAware {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _timer;
@@ -56,12 +59,37 @@ class _MessageScreenState extends State<MessageScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 註冊 RouteAware，以便監聽頁面可見性變化
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    routeObserver.unsubscribe(this);
     _messageController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _timer?.cancel();
     super.dispose();
+  }
+
+  // 當從其他頁面返回到此頁面時調用
+  @override
+  void didPopNext() {
+    debugPrint('MessageScreen: 返回此頁面，重新啟動 timer');
+    _startAutoFetch();
+  }
+
+  // 當從此頁面跳轉到其他頁面時調用
+  @override
+  void didPushNext() {
+    debugPrint('MessageScreen: 離開此頁面，停止 timer');
+    _stopAutoFetch();
   }
 
   Future<void> _initMessages() async {
@@ -93,6 +121,9 @@ class _MessageScreenState extends State<MessageScreen> {
   }
 
   void _startAutoFetch() {
+    // 先停止舊的 timer（如果存在）
+    _stopAutoFetch();
+    
     // Auto fetch messages every 3 seconds
     _timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
       if (!mounted) return;
@@ -107,6 +138,13 @@ class _MessageScreenState extends State<MessageScreen> {
         debugPrint('Error in auto fetch: $e');
       }
     });
+    debugPrint('MessageScreen: timer 已啟動');
+  }
+
+  void _stopAutoFetch() {
+    _timer?.cancel();
+    _timer = null;
+    debugPrint('MessageScreen: timer 已停止');
   }
 
   bool _isAtBottom() {
@@ -509,6 +547,32 @@ class _MessageScreenState extends State<MessageScreen> {
             },
           ),
           actions: [
+            // 案件訊息按鈕（帶未讀 badge）
+            IconButton(
+              icon: badges.Badge(
+                showBadge: true, // 使用 fake 未讀數，實際應該從 API 獲取
+                badgeContent: const Text(
+                  '3',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                badgeStyle: const badges.BadgeStyle(
+                  badgeColor: Colors.red,
+                  padding: EdgeInsets.all(6),
+                ),
+                position: badges.BadgePosition.topEnd(top: -4, end: -4),
+                child: const Icon(Icons.message),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CaseMessageListScreen()),
+                );
+              },
+            ),
             IconButton(
               icon: const Icon(Icons.search),
               onPressed: () {

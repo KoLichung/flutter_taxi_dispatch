@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/message_provider.dart';
+import 'providers/case_message_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/message_screen.dart';
 import 'screens/message_screen_animatedlist.dart';
@@ -10,6 +11,9 @@ import 'utils/push_notification_service.dart';
 
 // 創建一個全局 NavigatorKey
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+// 創建一個全局 RouteObserver，用於監聽頁面的可見性變化
+final RouteObserver<PageRoute> routeObserver = RouteObserver<PageRoute>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,12 +44,15 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => UserProvider()..init()),
         ChangeNotifierProvider(create: (_) => MessageProvider()),
+        ChangeNotifierProvider(create: (_) => CaseMessageProvider()),
       ],
       child: MaterialApp(
         title: '24H 叫車',
         debugShowCheckedModeBanner: false,
         // 使用全局 NavigatorKey
         navigatorKey: navigatorKey,
+        // 註冊 RouteObserver 以監聽頁面可見性變化
+        navigatorObservers: [routeObserver],
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF469030)),
           useMaterial3: true,
