@@ -550,10 +550,12 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
             // 案件訊息按鈕（帶未讀 badge）
             IconButton(
               icon: badges.Badge(
-                showBadge: true, // 使用 fake 未讀數，實際應該從 API 獲取
-                badgeContent: const Text(
-                  '3',
-                  style: TextStyle(
+                showBadge: messageProvider.caseMessageUnreadCount > 0,
+                badgeContent: Text(
+                  messageProvider.caseMessageUnreadCount > 99
+                      ? '99+'
+                      : '${messageProvider.caseMessageUnreadCount}',
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,

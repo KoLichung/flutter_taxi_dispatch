@@ -11,10 +11,12 @@ class MessageProvider extends ChangeNotifier {
   int _currentPage = 1;
   bool _hasMore = true;
   Set<int> _messageIds = {};
+  int _caseMessageUnreadCount = 0; // 案件消息未讀數
 
   List<Message> get messages => _messages;
   bool get isLoading => _isLoading;
   bool get hasMore => _hasMore;
+  int get caseMessageUnreadCount => _caseMessageUnreadCount; // 案件消息未讀數的 getter
 
   Future<void> init() async {
     _isLoading = true;
@@ -88,6 +90,11 @@ class MessageProvider extends ChangeNotifier {
       
       final List<dynamic> results = response['results'];
       final newMessages = results.map((e) => Message.fromJson(e)).toList();
+      
+      // 提取案件消息未讀數
+      if (response.containsKey('case_message_unread_count')) {
+        _caseMessageUnreadCount = response['case_message_unread_count'] ?? 0;
+      }
       
       // 檢查是否有臨時訊息需要更新
       if (_messages.isNotEmpty && _messages[0].id == -1) {

@@ -170,7 +170,9 @@ class ApiService {
       
       // Ensure we're fetching the latest messages with proper ordering
       final url = Uri.parse('$baseUrl/api/dispatch/messages/?page=$page&page_size=$pageSize&ordering=-created_at&_t=$timestamp&nocache=true');
-      // debugPrint('Sending API request to get messages: ${url.toString()}');
+      
+      debugPrint('=== 獲取系統消息列表 ===');
+      debugPrint('URL: ${url.toString()}');
       
       // Add additional no-cache headers
       final requestHeaders = {
@@ -185,25 +187,21 @@ class ApiService {
         headers: requestHeaders,
       ).timeout(const Duration(seconds: 10));
       
+      debugPrint('回應狀態碼: ${response.statusCode}');
+      
       if (response.statusCode == 200) {
         // Use utf8.decode to properly handle Chinese characters
         final responseBody = utf8.decode(response.bodyBytes);
-        // debugPrint('API response received at ${DateTime.now()}, length=${responseBody.length} bytes');
-        // Log a snippet of the response for debugging
-        if (responseBody.length > 0) {
-          final preview = responseBody.length > 200 ? '${responseBody.substring(0, 200)}...' : responseBody;
-          // debugPrint('Response preview: $preview');
-        }
         
         final decodedResponse = jsonDecode(responseBody);
         
-        // Log all message IDs to see what we're receiving
-        if (decodedResponse['results'] != null && decodedResponse['results'].isNotEmpty) {
-          final msgIds = decodedResponse['results'].map((m) => m['id']).toList();
-          // debugPrint('All message IDs from API: $msgIds');
+        // 打印案件消息未讀數
+        if (decodedResponse.containsKey('case_message_unread_count')) {
+          debugPrint('案件消息未讀數 (case_message_unread_count): ${decodedResponse['case_message_unread_count']}');
         }
         
-        // debugPrint('Decoded messages: count=${decodedResponse['count']}, results=${decodedResponse['results']?.length ?? 0}');
+        debugPrint('獲取系統消息成功: ${decodedResponse['count']} 條消息');
+        
         return decodedResponse;
       } else if (response.statusCode == 401) {
         throw Exception('獲取訊息失敗: 401 - 請重新登入');
@@ -456,6 +454,209 @@ class ApiService {
     } else {
       final errorBody = json.decode(response.body);
       throw Exception(errorBody['message'] ?? 'FCM 設備註冊失敗');
+    }
+  }
+
+  // ========== 案件消息 API ==========
+
+  // 獲取案件消息列表（聊天列表頁）
+  static Future<Map<String, dynamic>> getCaseMessageList({int page = 1}) async {
+    final headers = await _getHeaders();
+    try {
+      final url = Uri.parse('$baseUrl/api/dispatch/case-messages/?page=$page');
+      
+      debugPrint('=== 獲取案件消息列表 ===');
+      debugPrint('URL: ${url.toString()}');
+      
+      final requestHeaders = {
+        ...headers,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      };
+      
+      final response = await http.get(
+        url,
+        headers: requestHeaders,
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('回應狀態碼: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decodedResponse = jsonDecode(responseBody);
+        debugPrint('獲取案件列表成功: ${decodedResponse['count']} 個案件');
+        return decodedResponse;
+      } else if (response.statusCode == 401) {
+        throw Exception('獲取案件列表失敗: 401 - 請重新登入');
+      } else {
+        debugPrint('錯誤回應: ${response.statusCode} - ${response.body}');
+        throw Exception('獲取案件列表失敗: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      debugPrint('API 請求超時');
+      throw Exception('獲取案件列表超時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('獲取案件列表錯誤: $e');
+      rethrow;
+    }
+  }
+
+  // 獲取某個案件的消息列表
+  static Future<Map<String, dynamic>> getCaseMessages({
+    required int caseId,
+    int page = 1,
+  }) async {
+    final headers = await _getHeaders();
+    try {
+      final url = Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/?page=$page');
+      
+      debugPrint('=== 獲取案件消息 ===');
+      debugPrint('Case ID: $caseId, Page: $page');
+      debugPrint('URL: ${url.toString()}');
+      
+      final requestHeaders = {
+        ...headers,
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      };
+      
+      final response = await http.get(
+        url,
+        headers: requestHeaders,
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('回應狀態碼: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decodedResponse = jsonDecode(responseBody);
+        debugPrint('獲取案件消息成功: ${decodedResponse['count']} 條消息');
+        return decodedResponse;
+      } else if (response.statusCode == 401) {
+        throw Exception('獲取案件消息失敗: 401 - 請重新登入');
+      } else if (response.statusCode == 404) {
+        throw Exception('案件不存在');
+      } else {
+        debugPrint('錯誤回應: ${response.statusCode} - ${response.body}');
+        throw Exception('獲取案件消息失敗: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      debugPrint('API 請求超時');
+      throw Exception('獲取案件消息超時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('獲取案件消息錯誤: $e');
+      rethrow;
+    }
+  }
+
+  // 發送文字消息到案件
+  static Future<Map<String, dynamic>> sendCaseTextMessage({
+    required int caseId,
+    required String content,
+  }) async {
+    final headers = await _getHeaders();
+    try {
+      debugPrint('=== 發送案件文字消息 ===');
+      debugPrint('Case ID: $caseId');
+      debugPrint('Content: ${content.substring(0, content.length > 30 ? 30 : content.length)}...');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/'),
+        headers: headers,
+        body: jsonEncode({
+          'message_type': 'text',
+          'content': content,
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('回應狀態碼: ${response.statusCode}');
+      
+      if (response.statusCode == 201) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decodedResponse = jsonDecode(responseBody);
+        debugPrint('消息發送成功，ID: ${decodedResponse['id']}');
+        return decodedResponse;
+      } else if (response.statusCode == 401) {
+        throw Exception('發送消息失敗: 401 - 請重新登入');
+      } else if (response.statusCode == 404) {
+        throw Exception('案件不存在');
+      } else {
+        debugPrint('錯誤回應: ${response.statusCode} - ${response.body}');
+        throw Exception('發送消息失敗: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      debugPrint('API 請求超時');
+      throw Exception('發送消息超時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('發送消息錯誤: $e');
+      rethrow;
+    }
+  }
+
+  // 標記案件消息為已讀
+  static Future<Map<String, dynamic>> markCaseMessagesAsRead({
+    required int caseId,
+  }) async {
+    final headers = await _getHeaders();
+    try {
+      debugPrint('=== 標記案件消息為已讀 ===');
+      debugPrint('Case ID: $caseId');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/mark-read/'),
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('回應狀態碼: ${response.statusCode}');
+      
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decodedResponse = jsonDecode(responseBody);
+        debugPrint('標記已讀成功: ${decodedResponse['updated_count']} 條消息');
+        return decodedResponse;
+      } else if (response.statusCode == 401) {
+        throw Exception('標記已讀失敗: 401 - 請重新登入');
+      } else if (response.statusCode == 404) {
+        throw Exception('案件不存在');
+      } else {
+        debugPrint('錯誤回應: ${response.statusCode} - ${response.body}');
+        throw Exception('標記已讀失敗: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      debugPrint('API 請求超時');
+      throw Exception('標記已讀超時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('標記已讀錯誤: $e');
+      rethrow;
+    }
+  }
+
+  // 獲取案件未讀消息數
+  static Future<int> getCaseUnreadCount({
+    required int caseId,
+  }) async {
+    final headers = await _getHeaders();
+    try {
+      final url = Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/unread-count/');
+      
+      final response = await http.get(
+        url,
+        headers: headers,
+      ).timeout(const Duration(seconds: 10));
+      
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decodedResponse = jsonDecode(responseBody);
+        return decodedResponse['unread_count'] ?? 0;
+      } else {
+        debugPrint('獲取未讀數失敗: ${response.statusCode}');
+        return 0;
+      }
+    } catch (e) {
+      debugPrint('獲取未讀數錯誤: $e');
+      return 0;
     }
   }
 

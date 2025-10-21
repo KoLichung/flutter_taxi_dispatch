@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../models/case_message.dart';
 import '../providers/case_message_provider.dart';
 import 'case_message_detail_screen.dart';
+import '../main.dart' show routeObserver;
 
 class CaseMessageListScreen extends StatefulWidget {
   const CaseMessageListScreen({super.key});
@@ -12,31 +13,69 @@ class CaseMessageListScreen extends StatefulWidget {
   State<CaseMessageListScreen> createState() => _CaseMessageListScreenState();
 }
 
-class _CaseMessageListScreenState extends State<CaseMessageListScreen> {
+class _CaseMessageListScreenState extends State<CaseMessageListScreen> with RouteAware {
   final ScrollController _scrollController = ScrollController();
+  CaseMessageProvider? _provider; // 保存 provider 引用
+  bool _isInitialized = false; // 標記是否已初始化
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     
-    // 初始化並啟動自動刷新
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final provider = Provider.of<CaseMessageProvider>(context, listen: false);
-      provider.fetchCaseMessageList(refresh: true);
-      provider.startAutoRefresh();
-    });
+    // 保存 provider 引用
+    if (_provider == null) {
+      _provider = Provider.of<CaseMessageProvider>(context, listen: false);
+    }
+    
+    // 註冊 RouteAware，以便監聽頁面可見性變化
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      routeObserver.subscribe(this, route);
+    }
+    
+    // 初始化並啟動自動刷新（只在第一次時）
+    // 使用 postFrameCallback 延遲到 build 完成後執行，避免在 build 期間調用 notifyListeners
+    if (!_isInitialized && _provider != null) {
+      _isInitialized = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _provider!.fetchCaseMessageList(refresh: true);
+          _provider!.startAutoRefresh();
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
-    // 停止自動刷新
-    final provider = Provider.of<CaseMessageProvider>(context, listen: false);
-    provider.stopAutoRefresh();
+    routeObserver.unsubscribe(this);
+    
+    // 使用保存的 provider 引用停止自動刷新
+    _provider?.stopAutoRefresh();
     
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // 當從其他頁面返回到此頁面時調用
+  @override
+  void didPopNext() {
+    debugPrint('CaseMessageListScreen: 返回此頁面，重新啟動 timer');
+    _provider?.startAutoRefresh();
+  }
+
+  // 當從此頁面跳轉到其他頁面時調用
+  @override
+  void didPushNext() {
+    debugPrint('CaseMessageListScreen: 離開此頁面，停止 timer');
+    _provider?.stopAutoRefresh();
   }
 
   void _onScroll() {
@@ -157,12 +196,7 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> {
       BuildContext context, CaseMessageListItem item) {
     return InkWell(
       onTap: () {
-        // 停止自動刷新
-        final provider =
-            Provider.of<CaseMessageProvider>(context, listen: false);
-        provider.stopAutoRefresh();
-
-        // 導航到詳情頁
+        // 導航到詳情頁（timer 由 RouteAware 自動管理）
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -171,10 +205,7 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> {
               caseNumber: item.caseNumber,
             ),
           ),
-        ).then((_) {
-          // 返回後重新啟動自動刷新
-          provider.startAutoRefresh();
-        });
+        );
       },
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -252,29 +283,35 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> {
                   const SizedBox(height: 6),
 
                   // 最新消息
-                  if (item.latestMessage != null)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.latestMessage!.messageType == 'image'
-                                ? '[圖片] ${item.latestMessage!.content}'
-                                : item.latestMessage!.content,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: item.unreadCount > 0
-                                  ? Colors.black87
-                                  : Colors.grey.shade600,
-                              fontWeight: item.unreadCount > 0
-                                  ? FontWeight.w500
-                                  : FontWeight.normal,
-                            ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.latestMessage != null
+                              ? (item.latestMessage!.messageType == 'image'
+                                  ? '[圖片] ${item.latestMessage!.content}'
+                                  : item.latestMessage!.content)
+                              : '暫無訊息',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: item.latestMessage == null
+                                ? Colors.grey.shade400
+                                : (item.unreadCount > 0
+                                    ? Colors.black87
+                                    : Colors.grey.shade600),
+                            fontWeight: item.unreadCount > 0
+                                ? FontWeight.w500
+                                : FontWeight.normal,
+                            fontStyle: item.latestMessage == null
+                                ? FontStyle.italic
+                                : FontStyle.normal,
                           ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -288,7 +325,7 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> {
                 Text(
                   item.latestMessage != null
                       ? _formatTime(item.latestMessage!.createdAt)
-                      : '',
+                      : _formatTime(item.createTime),
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.grey.shade500,

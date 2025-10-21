@@ -321,9 +321,16 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   Widget build(BuildContext context) {
     final provider = Provider.of<CaseMessageProvider>(context);
     final userProvider = Provider.of<UserProvider>(context);
-    // 使用固定的測試 ID (101) 以匹配 fake data 中的派單者 ID
-    // 實際整合 API 時改為: userProvider.user?.id ?? 101
-    final currentUserId = 101;
+    // 使用實際登錄用戶的 ID
+    final currentUserId = userProvider.user?.id ?? 0;
+    
+    // 打印當前用戶信息
+    debugPrint('========== 當前用戶信息 ==========');
+    debugPrint('Current User ID: $currentUserId');
+    debugPrint('UserProvider User ID: ${userProvider.user?.id}');
+    debugPrint('UserProvider User Name: ${userProvider.user?.name}');
+    debugPrint('UserProvider User Nick Name: ${userProvider.user?.nickName}');
+    debugPrint('===================================');
 
     _isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
 
@@ -403,6 +410,15 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   Widget _buildMessageItem(
       BuildContext context, CaseMessage message, int currentUserId) {
     final isUserMessage = message.isFromCurrentUser(currentUserId);
+    
+    // 打印消息對齊判斷信息
+    debugPrint('---------- 消息對齊判斷 ----------');
+    debugPrint('消息 ID: ${message.id}');
+    debugPrint('Sender ID: ${message.sender}');
+    debugPrint('Current User ID: $currentUserId');
+    debugPrint('isUserMessage (sender == currentUserId): $isUserMessage');
+    debugPrint('對齊方式: ${isUserMessage ? "右對齊" : "左對齊"}');
+    debugPrint('-----------------------------------');
 
     return Align(
       alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
