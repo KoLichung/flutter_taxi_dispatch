@@ -152,23 +152,6 @@ class CaseMessageProvider extends ChangeNotifier {
       
       final List<dynamic> results = response['results'] ?? [];
       _currentCaseMessages = results.map((e) => CaseMessage.fromJson(e)).toList();
-      
-      // 打印每條消息的詳細信息
-      debugPrint('========== 案件消息詳細信息 ==========');
-      for (var i = 0; i < _currentCaseMessages.length; i++) {
-        final msg = _currentCaseMessages[i];
-        debugPrint('消息 ${i + 1}:');
-        debugPrint('  ID: ${msg.id}');
-        debugPrint('  Case ID: ${msg.caseId}');
-        debugPrint('  Sender ID: ${msg.sender}');
-        debugPrint('  Sender Name: ${msg.senderName}');
-        debugPrint('  Sender Nick Name: ${msg.senderNickName}');
-        debugPrint('  Message Type: ${msg.messageType}');
-        debugPrint('  Content: ${msg.content}');
-        debugPrint('  Created At: ${msg.createdAt}');
-        debugPrint('  ---');
-      }
-      debugPrint('======================================');
     } catch (e) {
       debugPrint('獲取案件消息失敗: $e');
       rethrow;
@@ -212,28 +195,16 @@ class CaseMessageProvider extends ChangeNotifier {
     String? caption,
   }) async {
     try {
-      debugPrint('========== 開始發送圖片消息 ==========');
-      debugPrint('Case ID: $caseId');
-      debugPrint('User ID: $userId');
-      debugPrint('Caption: ${caption ?? "無說明"}');
+      debugPrint('開始發送圖片消息 (Case: $caseId)');
       
       // 1. 上传图片到 S3
-      debugPrint('步驟 1: 上傳圖片到 S3...');
       final uploadResult = await S3UploadService.uploadImage(
         imageFile: imageFile,
         caseId: caseId,
         userId: userId,
-        onProgress: (progress) {
-          debugPrint('上傳進度: ${(progress * 100).toStringAsFixed(1)}%');
-        },
       );
       
-      debugPrint('S3 上傳成功！');
-      debugPrint('Image Key: ${uploadResult['image_key']}');
-      debugPrint('Image URL: ${uploadResult['image_url']}');
-      
       // 2. 调用后端创建图片消息记录
-      debugPrint('步驟 2: 創建圖片消息記錄...');
       final response = await ApiService.sendCaseImageMessage(
         caseId: caseId,
         imageKey: uploadResult['image_key']!,
@@ -242,19 +213,13 @@ class CaseMessageProvider extends ChangeNotifier {
       );
       
       // 3. 更新本地消息列表
-      debugPrint('步驟 3: 更新本地消息列表...');
       final newMessage = CaseMessage.fromJson(response);
       _currentCaseMessages.insert(0, newMessage);
       notifyListeners();
       
-      debugPrint('✅ 圖片消息發送成功！');
-      debugPrint('消息 ID: ${newMessage.id}');
-      debugPrint('====================================');
-    } catch (e, stackTrace) {
-      debugPrint('❌ 發送圖片消息失敗');
-      debugPrint('錯誤: $e');
-      debugPrint('堆棧: $stackTrace');
-      debugPrint('====================================');
+      debugPrint('✅ 圖片消息發送成功 (ID: ${newMessage.id})');
+    } catch (e) {
+      debugPrint('❌ 發送圖片消息失敗: $e');
       rethrow;
     }
   }
