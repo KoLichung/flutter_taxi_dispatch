@@ -660,5 +660,55 @@ class ApiService {
     }
   }
 
+  // 發送圖片消息到案件
+  static Future<Map<String, dynamic>> sendCaseImageMessage({
+    required int caseId,
+    required String imageKey,
+    required String imageUrl,
+    String? content,
+  }) async {
+    final headers = await _getHeaders();
+    try {
+      debugPrint('=== 發送案件圖片消息 ===');
+      debugPrint('Case ID: $caseId');
+      debugPrint('Image Key: $imageKey');
+      debugPrint('Image URL: $imageUrl');
+      debugPrint('Content: ${content ?? "發送了一張圖片"}');
+      
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/'),
+        headers: headers,
+        body: jsonEncode({
+          'message_type': 'image',
+          'image_key': imageKey,
+          'image_url': imageUrl,
+          'content': content ?? '發送了一張圖片',
+        }),
+      ).timeout(const Duration(seconds: 10));
+      
+      debugPrint('回應狀態碼: ${response.statusCode}');
+      
+      if (response.statusCode == 201) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decodedResponse = jsonDecode(responseBody);
+        debugPrint('圖片消息發送成功，ID: ${decodedResponse['id']}');
+        return decodedResponse;
+      } else if (response.statusCode == 401) {
+        throw Exception('發送圖片消息失敗: 401 - 請重新登入');
+      } else if (response.statusCode == 404) {
+        throw Exception('案件不存在');
+      } else {
+        debugPrint('錯誤回應: ${response.statusCode} - ${response.body}');
+        throw Exception('發送圖片消息失敗: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      debugPrint('API 請求超時');
+      throw Exception('發送圖片消息超時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('發送圖片消息錯誤: $e');
+      rethrow;
+    }
+  }
+
 
 } 

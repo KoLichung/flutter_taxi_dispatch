@@ -1,0 +1,50 @@
+/// AWS S3 配置示例文件
+/// 
+/// 使用说明：
+/// 1. 复制此文件为 aws_config.dart
+/// 2. 填入你的 AWS 凭证
+/// 3. aws_config.dart 已加入 .gitignore，不会被提交到 Git
+/// 
+/// ⚠️ 重要安全提示：
+/// 生产环境不应该在客户端硬编码 AWS 密钥！
+/// 建议使用：
+/// 1. 环境变量
+/// 2. 后端生成临时凭证
+/// 3. AWS Cognito Identity Pool
+class AWSConfig {
+  // AWS 凭证
+  static const String accessKeyId = 'YOUR_AWS_ACCESS_KEY_ID';
+  static const String secretAccessKey = 'YOUR_AWS_SECRET_ACCESS_KEY';
+  
+  // S3 配置
+  static const String region = 'ap-northeast-1'; // AWS 区域
+  static const String bucketName = 'your-bucket-name'; // S3 bucket 名称
+  
+  // S3 端点（Minio 客户端需要）
+  static const String endpoint = 's3.$region.amazonaws.com';
+  
+  /// 获取完整的图片 URL
+  /// 
+  /// 参数：
+  /// - key: S3 对象的 key，格式如 'case_messages/123/456/1729415625000.jpg'
+  /// 
+  /// 返回：完整的 HTTPS URL
+  static String getImageUrl(String key) {
+    return 'https://$bucketName.s3.$region.amazonaws.com/$key';
+  }
+  
+  /// 生成 S3 key
+  /// 
+  /// 格式: case_messages/{caseId}/{userId}/{timestamp}{ext}
+  /// 示例: case_messages/123/456/1729415625000.jpg
+  static String generateS3Key({
+    required int caseId,
+    required int userId,
+    required String fileExtension,
+  }) {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final ext = fileExtension.startsWith('.') ? fileExtension : '.$fileExtension';
+    return 'case_messages/$caseId/$userId/$timestamp$ext';
+  }
+}
+

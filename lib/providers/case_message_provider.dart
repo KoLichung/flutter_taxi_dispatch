@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/case_message.dart';
 import '../utils/api_service.dart';
+import '../services/s3_upload_service.dart';
 
 class CaseMessageProvider extends ChangeNotifier {
   List<CaseMessageListItem> _caseMessageList = [];
@@ -197,57 +199,62 @@ class CaseMessageProvider extends ChangeNotifier {
     }
   }
 
-  // 發送圖片消息（暫時使用 fake data，實際 S3 上傳功能待實作）
-  Future<void> sendImageMessage(int caseId, String imageUrl, String? caption) async {
+  // 發送圖片消息（使用 S3 上傳）
+  /// 
+  /// 流程：
+  /// 1. 上传图片到 S3
+  /// 2. 调用后端创建图片消息记录
+  /// 3. 更新本地消息列表
+  Future<void> sendImageMessage({
+    required int caseId,
+    required File imageFile,
+    required int userId,
+    String? caption,
+  }) async {
     try {
-      // 注意：圖片上傳到 S3 的功能暫時未實作
-      // 實際使用時需要：
-      // 1. 調用 API 獲取上傳 URL: GET /api/dispatch/cases/{case_id}/messages/upload-url/
-      // 2. 上傳圖片到 S3 (使用 PUT 方法)
-      // 3. 調用 API 創建圖片消息記錄: POST /api/dispatch/cases/{case_id}/messages/
-      //    請求體需包含: { "message_type": "image", "image_key": "...", "image_url": "...", "content": "..." }
-      //    注意：case 字段會自動從 URL 路徑參數獲取，不需要在請求體中提供
+      debugPrint('========== 開始發送圖片消息 ==========');
+      debugPrint('Case ID: $caseId');
+      debugPrint('User ID: $userId');
+      debugPrint('Caption: ${caption ?? "無說明"}');
       
-      // 目前使用 fake data 模擬
-      final tempMessage = CaseMessage(
-        id: -1,
+      // 1. 上传图片到 S3
+      debugPrint('步驟 1: 上傳圖片到 S3...');
+      final uploadResult = await S3UploadService.uploadImage(
+        imageFile: imageFile,
         caseId: caseId,
-        sender: 0,
-        senderName: '派单者',
-        senderNickName: '派单者',
-        messageType: 'image',
-        content: caption ?? '發送了一張圖片',
-        imageUrl: imageUrl,
-        isRead: true,
-        createdAt: DateTime.now(),
+        userId: userId,
+        onProgress: (progress) {
+          debugPrint('上傳進度: ${(progress * 100).toStringAsFixed(1)}%');
+        },
       );
-
-      _currentCaseMessages.insert(0, tempMessage);
-      notifyListeners();
-
-      await Future.delayed(const Duration(seconds: 2));
-
-      _currentCaseMessages[0] = CaseMessage(
-        id: DateTime.now().millisecondsSinceEpoch,
+      
+      debugPrint('S3 上傳成功！');
+      debugPrint('Image Key: ${uploadResult['image_key']}');
+      debugPrint('Image URL: ${uploadResult['image_url']}');
+      
+      // 2. 调用后端创建图片消息记录
+      debugPrint('步驟 2: 創建圖片消息記錄...');
+      final response = await ApiService.sendCaseImageMessage(
         caseId: caseId,
-        sender: 0,
-        senderName: '派单者',
-        senderNickName: '派单者',
-        messageType: 'image',
-        content: caption ?? '發送了一張圖片',
-        imageUrl: imageUrl,
-        isRead: true,
-        createdAt: DateTime.now(),
+        imageKey: uploadResult['image_key']!,
+        imageUrl: uploadResult['image_url']!,
+        content: caption,
       );
-
+      
+      // 3. 更新本地消息列表
+      debugPrint('步驟 3: 更新本地消息列表...');
+      final newMessage = CaseMessage.fromJson(response);
+      _currentCaseMessages.insert(0, newMessage);
       notifyListeners();
-      debugPrint('圖片消息發送成功（使用 fake data）');
-    } catch (e) {
-      debugPrint('發送圖片消息失敗: $e');
-      if (_currentCaseMessages.isNotEmpty && _currentCaseMessages[0].id == -1) {
-        _currentCaseMessages.removeAt(0);
-        notifyListeners();
-      }
+      
+      debugPrint('✅ 圖片消息發送成功！');
+      debugPrint('消息 ID: ${newMessage.id}');
+      debugPrint('====================================');
+    } catch (e, stackTrace) {
+      debugPrint('❌ 發送圖片消息失敗');
+      debugPrint('錯誤: $e');
+      debugPrint('堆棧: $stackTrace');
+      debugPrint('====================================');
       rethrow;
     }
   }

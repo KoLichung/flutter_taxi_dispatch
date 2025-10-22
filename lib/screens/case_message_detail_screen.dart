@@ -1,9 +1,10 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '../models/case_message.dart';
 import '../providers/case_message_provider.dart';
 import '../providers/user_provider.dart';
@@ -28,6 +29,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isKeyboardVisible = false;
+  Timer? _autoRefreshTimer;
   
   // 全域變數存儲 EditableTextState
   EditableTextState? _currentEditableTextState;
@@ -50,14 +52,34 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
           _scrollToBottom();
         }
       });
+      
+      // 啟動自動刷新（每 3 秒）
+      _startAutoRefresh();
     });
   }
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+  
+  void _startAutoRefresh() {
+    _autoRefreshTimer?.cancel(); // 先取消舊的 timer
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+      if (!mounted) return;
+      
+      try {
+        debugPrint('案件消息詳情自動刷新中（每 3 秒）');
+        final provider = Provider.of<CaseMessageProvider>(context, listen: false);
+        await provider.fetchCaseMessages(widget.caseId, refresh: false);
+      } catch (e) {
+        debugPrint('自動刷新失敗: $e');
+      }
+    });
+    debugPrint('案件消息詳情自動刷新已啟動（每 3 秒）');
   }
 
   void _scrollToBottom() {
@@ -127,26 +149,36 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       final XFile? image = await _imagePicker.pickImage(source: source);
       if (image == null) return;
 
-      // 在實際應用中，這裡需要：
-      // 1. 調用 API 獲取上傳 URL
-      // 2. 上傳圖片到 S3
-      // 3. 調用 API 創建圖片消息記錄
-
-      // 現在使用 fake data 模擬
-      final provider =
-          Provider.of<CaseMessageProvider>(context, listen: false);
+      // 獲取 Provider
+      final provider = Provider.of<CaseMessageProvider>(context, listen: false);
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final userId = userProvider.user?.id ?? 0;
+      
+      if (userId == 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('無法獲取用戶信息')),
+          );
+        }
+        return;
+      }
       
       // 顯示上傳中提示
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('正在上傳圖片...')),
+          const SnackBar(
+            content: Text('正在上傳圖片到 S3...'),
+            duration: Duration(seconds: 30),
+          ),
         );
       }
 
+      // 真實上傳到 S3 並創建消息
       await provider.sendImageMessage(
-        widget.caseId,
-        image.path, // 在實際應用中這應該是 S3 URL
-        '發送了一張圖片',
+        caseId: widget.caseId,
+        imageFile: File(image.path),
+        userId: userId,
+        caption: '發送了一張圖片',
       );
 
       // 滾動到底部
@@ -157,14 +189,24 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       });
 
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('圖片發送成功')),
+          const SnackBar(
+            content: Text('✅ 圖片發送成功'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('發送圖片失敗: $e')),
+          SnackBar(
+            content: Text('❌ 發送圖片失敗: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
         );
       }
     }
