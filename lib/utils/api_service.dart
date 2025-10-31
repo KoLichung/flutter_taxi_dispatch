@@ -673,7 +673,7 @@ class ApiService {
       debugPrint('Case ID: $caseId');
       debugPrint('Image Key: $imageKey');
       debugPrint('Image URL: $imageUrl');
-      debugPrint('Content: ${content ?? "發送了一張圖片"}');
+      debugPrint('Content: ${content ?? ""}');
       
       final response = await http.post(
         Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/'),
@@ -682,7 +682,7 @@ class ApiService {
           'message_type': 'image',
           'image_key': imageKey,
           'image_url': imageUrl,
-          'content': content ?? '發送了一張圖片',
+          'content': content ?? '', // 圖片訊息不顯示文字
         }),
       ).timeout(const Duration(seconds: 10));
       

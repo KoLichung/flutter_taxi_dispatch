@@ -5,7 +5,9 @@
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>zh_TW</string>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>24H叫車</string>
 	<key>CFBundleExecutable</key>
@@ -43,6 +45,18 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>需要使用相機來拍攝照片</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要存取相簿來選擇照片</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要儲存照片到相簿</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh_TW</string>
+		<string>zh_CN</string>
+		<string>en</string>
 	</array>
 </dict>
 </plist>

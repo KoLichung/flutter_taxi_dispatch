@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/message_provider.dart';
@@ -53,6 +54,18 @@ class MyApp extends StatelessWidget {
         navigatorKey: navigatorKey,
         // 註冊 RouteObserver 以監聽頁面可見性變化
         navigatorObservers: [routeObserver],
+        // 本地化設置
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('zh', 'TW'), // 繁體中文
+          Locale('zh', 'CN'), // 簡體中文
+          Locale('en', 'US'), // 英文
+        ],
+        locale: const Locale('zh', 'TW'), // 預設使用繁體中文
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF469030)),
           useMaterial3: true,

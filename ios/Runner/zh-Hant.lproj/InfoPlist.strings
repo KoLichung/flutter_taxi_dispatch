@@ -1,0 +1,13 @@
+/* Camera Permission */
+"NSCameraUsageDescription" = "需要使用相機來拍攝照片";
+
+/* Photo Library Permission */
+"NSPhotoLibraryUsageDescription" = "需要存取相簿來選擇照片";
+
+/* Photo Library Add Permission */
+"NSPhotoLibraryAddUsageDescription" = "需要儲存照片到相簿";
+
+/* App Display Name */
+"CFBundleDisplayName" = "24H叫車";
+"CFBundleName" = "24H叫車";
+

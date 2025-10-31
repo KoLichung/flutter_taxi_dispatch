@@ -112,10 +112,14 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
         return '前往接客';
       case 'on_road':
         return '行程中';
+      case 'catched':
+        return '任務中';
       case 'arrived':
         return '已到達';
       case 'completed':
         return '已完成';
+      case 'canceled':
+        return '已取消';
       default:
         return state;
     }

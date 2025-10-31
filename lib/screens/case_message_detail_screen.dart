@@ -178,7 +178,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
         caseId: widget.caseId,
         imageFile: File(image.path),
         userId: userId,
-        caption: '發送了一張圖片',
+        caption: '', // 不顯示文字說明，只顯示圖片
       );
 
       // 滾動到底部
