@@ -112,7 +112,10 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('發送訊息失敗: $e')),
+          SnackBar(
+            content: Text('發送訊息失敗: $e'),
+            duration: const Duration(milliseconds: 800),
+          ),
         );
       }
     }
@@ -157,7 +160,10 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       if (userId == 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('無法獲取用戶信息')),
+            const SnackBar(
+              content: Text('無法獲取用戶信息'),
+              duration: Duration(milliseconds: 800),
+            ),
           );
         }
         return;
@@ -168,7 +174,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('正在上傳圖片到 S3...'),
-            duration: Duration(seconds: 30),
+            duration: Duration(milliseconds: 800),
           ),
         );
       }
@@ -194,7 +200,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
           const SnackBar(
             content: Text('✅ 圖片發送成功'),
             backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+            duration: Duration(milliseconds: 800),
           ),
         );
       }
@@ -205,7 +211,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
           SnackBar(
             content: Text('❌ 發送圖片失敗: $e'),
             backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
+            duration: const Duration(milliseconds: 800),
           ),
         );
       }
@@ -297,7 +303,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text('已複製到剪貼簿'),
-                duration: Duration(milliseconds: 100),
+                duration: Duration(milliseconds: 800),
               ),
             );
           },
