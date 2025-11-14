@@ -5,6 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:saver_gallery/saver_gallery.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import '../models/case_message.dart';
 import '../providers/case_message_provider.dart';
 import '../providers/user_provider.dart';
@@ -55,6 +59,9 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       
       // 啟動自動刷新（每 3 秒）
       _startAutoRefresh();
+      
+      // 預先請求相簿權限
+      _requestPhotoPermission();
     });
   }
 
@@ -90,6 +97,70 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOut,
     );
+  }
+
+  // 預先請求相簿權限
+  Future<void> _requestPhotoPermission() async {
+    try {
+      bool granted = false;
+      
+      if (Platform.isAndroid) {
+        // Android 權限處理 - 根據 SDK 版本
+        final deviceInfoPlugin = DeviceInfoPlugin();
+        final deviceInfo = await deviceInfoPlugin.androidInfo;
+        final sdkInt = deviceInfo.version.sdkInt;
+        
+        // Android 10 (SDK 29) 以下需要 storage 權限，之後版本不需要
+        // 因為我們的 skipIfExists = false，不需要讀取權限
+        if (sdkInt < 29) {
+          granted = await Permission.storage.request().isGranted;
+        } else {
+          granted = true; // Android 10+ 不需要特殊權限
+        }
+        
+        debugPrint('Android SDK: $sdkInt, 權限授予: $granted');
+      } else {
+        // iOS 權限處理
+        // 根據 saver_gallery 官方文件：
+        // skipIfExists = false 時，只需要 photosAddOnly 權限
+        // skipIfExists = true 時，需要 photos 權限（因為需要檢查檔案是否存在）
+        
+        // 我們設定 skipIfExists: false，所以只請求 photosAddOnly
+        final status = await Permission.photosAddOnly.status;
+        debugPrint('iOS photosAddOnly 當前狀態: $status');
+        
+        if (status.isDenied) {
+          granted = await Permission.photosAddOnly.request().isGranted;
+          debugPrint('iOS photosAddOnly 請求後狀態: $granted');
+        } else if (status.isGranted) {
+          granted = true;
+          debugPrint('iOS photosAddOnly 已授予權限');
+        } else if (status.isPermanentlyDenied) {
+          debugPrint('iOS photosAddOnly 已永久拒絕，需要前往設定');
+          granted = false;
+        } else {
+          granted = false;
+        }
+      }
+      
+      // 如果權限被拒絕，顯示提示訊息
+      if (!granted && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('需要相簿權限才能保存圖片，請前往設定開啟'),
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: '前往設定',
+              onPressed: () {
+                openAppSettings();
+              },
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('請求相簿權限失敗: $e');
+    }
   }
 
   Future<void> _sendMessage() async {
@@ -529,52 +600,59 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   }
 
   Widget _buildImageWidget(String imageUrl) {
-    // 如果是本地檔案路徑
-    if (imageUrl.startsWith('/')) {
-      return Image.file(
-        File(imageUrl),
-        width: 200,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return Container(
-            width: 200,
-            height: 150,
-            color: Colors.grey.shade300,
-            child: const Icon(Icons.broken_image, size: 48),
-          );
-        },
-      );
-    }
-
-    // 網絡圖片
-    return Image.network(
-      imageUrl,
-      width: 200,
-      fit: BoxFit.cover,
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return Container(
-          width: 200,
-          height: 150,
-          color: Colors.grey.shade300,
-          child: Center(
-            child: CircularProgressIndicator(
-              value: loadingProgress.expectedTotalBytes != null
-                  ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
-                  : null,
-            ),
+    final isLocalFile = imageUrl.startsWith('/');
+    
+    return GestureDetector(
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (context) => _FullScreenImageViewer(imageUrl: imageUrl),
           ),
         );
       },
-      errorBuilder: (context, error, stackTrace) {
-        return Container(
-          width: 200,
-          height: 150,
-          color: Colors.grey.shade300,
-          child: const Icon(Icons.broken_image, size: 48),
-        );
-      },
+      child: isLocalFile
+          ? Image.file(
+              File(imageUrl),
+              width: 200,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 200,
+                  height: 150,
+                  color: Colors.grey.shade300,
+                  child: const Icon(Icons.broken_image, size: 48),
+                );
+              },
+            )
+          : Image.network(
+              imageUrl,
+              width: 200,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  width: 200,
+                  height: 150,
+                  color: Colors.grey.shade300,
+                  child: Center(
+                    child: CircularProgressIndicator(
+                      value: loadingProgress.expectedTotalBytes != null
+                          ? loadingProgress.cumulativeBytesLoaded /
+                              loadingProgress.expectedTotalBytes!
+                          : null,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 200,
+                  height: 150,
+                  color: Colors.grey.shade300,
+                  child: const Icon(Icons.broken_image, size: 48),
+                );
+              },
+            ),
     );
   }
 
@@ -684,6 +762,181 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
         ],
       ),
     );
+  }
+}
+
+// 全屏圖片查看器
+class _FullScreenImageViewer extends StatelessWidget {
+  final String imageUrl;
+
+  const _FullScreenImageViewer({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.download),
+            onPressed: () => _downloadImage(context),
+          ),
+        ],
+      ),
+      body: Container(
+        // 向上偏移 100px，使圖片在視覺中心偏上
+        padding: const EdgeInsets.only(bottom: 100),
+        child: Center(
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: imageUrl.startsWith('http')
+                ? Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          size: 100,
+                          color: Colors.white,
+                        ),
+                      );
+                    },
+                  )
+                : Image.file(
+                    File(imageUrl),
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          size: 100,
+                          color: Colors.white,
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _downloadImage(BuildContext context) async {
+    try {
+      // 檢查權限狀態
+      bool hasPermission = false;
+      
+      if (Platform.isAndroid) {
+        final deviceInfoPlugin = DeviceInfoPlugin();
+        final deviceInfo = await deviceInfoPlugin.androidInfo;
+        final sdkInt = deviceInfo.version.sdkInt;
+        
+        if (sdkInt < 29) {
+          hasPermission = await Permission.storage.status.isGranted;
+        } else {
+          hasPermission = true; // Android 10+ 不需要特殊權限
+        }
+      } else {
+        // iOS - 檢查添加到相簿的權限
+        hasPermission = await Permission.photosAddOnly.status.isGranted;
+      }
+
+      // 如果沒有權限，提示用戶並提供跳轉到設定的選項
+      if (!hasPermission) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('需要相簿權限才能保存圖片'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+              action: SnackBarAction(
+                label: '開啟設定',
+                textColor: Colors.white,
+                onPressed: () {
+                  openAppSettings();
+                },
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      // 顯示保存中提示
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('正在保存圖片...'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+
+      SaveResult result;
+      final fileName = "taxi_dispatch_${DateTime.now().millisecondsSinceEpoch}.jpg";
+      
+      if (imageUrl.startsWith('http')) {
+        // 下載並保存網絡圖片
+        final response = await http.get(Uri.parse(imageUrl));
+        if (response.statusCode == 200) {
+          result = await SaverGallery.saveImage(
+            Uint8List.fromList(response.bodyBytes),
+            quality: 100,
+            fileName: fileName,
+            androidRelativePath: "Pictures/TaxiDispatch",
+            skipIfExists: false,
+          );
+        } else {
+          throw Exception('下載圖片失敗');
+        }
+      } else {
+        // 保存本地圖片
+        final bytes = await File(imageUrl).readAsBytes();
+        result = await SaverGallery.saveImage(
+          Uint8List.fromList(bytes),
+          quality: 100,
+          fileName: fileName,
+          androidRelativePath: "Pictures/TaxiDispatch",
+          skipIfExists: false,
+        );
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        if (result.isSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ 圖片已保存到相簿'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('❌ 保存圖片失敗: ${result.errorMessage ?? "未知錯誤"}'),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('❌ 保存圖片失敗: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
   }
 }
 
