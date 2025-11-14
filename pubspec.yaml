@@ -39,7 +39,7 @@ dependencies:
   shared_preferences: ^2.2.2
   provider: ^6.1.1
   http: ^1.2.0
-  intl: ^0.20.2
+  intl: ^0.19.0
   url_launcher: ^6.2.5
   # Firebase 推播相關套件
   firebase_core: ^2.24.2
@@ -52,7 +52,10 @@ dependencies:
   # AWS S3 上傳
   minio: ^3.5.8
   path: ^1.9.0
-  mime: ^1.0.5
+  mime: ^2.0.0
+  # 圖片保存
+  saver_gallery: ^4.0.1
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
