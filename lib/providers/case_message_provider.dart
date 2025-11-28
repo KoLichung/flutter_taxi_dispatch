@@ -26,13 +26,13 @@ class CaseMessageProvider extends ChangeNotifier {
   // 啟動自動刷新 timer（每 5 秒）
   void startAutoRefresh() {
     stopAutoRefresh(); // 先停止舊的 timer
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       // 只有在不是正在分頁加載時才自動刷新第一頁
       if (!_isPaginating) {
         fetchCaseMessageList(refresh: false);
       }
     });
-    debugPrint('案件消息自動刷新已啟動（每 5 秒）');
+    debugPrint('案件消息自動刷新已啟動（每 3 秒）');
   }
 
   // 停止自動刷新
@@ -139,6 +139,7 @@ class CaseMessageProvider extends ChangeNotifier {
   }
 
   // 獲取某個案件的消息列表（使用真實 API）
+  // 完全以 server 為準，直接替換本地訊息
   Future<void> fetchCaseMessages(int caseId, {bool refresh = true}) async {
     if (refresh) {
       _isLoading = true;
@@ -151,7 +152,11 @@ class CaseMessageProvider extends ChangeNotifier {
       final response = await ApiService.getCaseMessages(caseId: caseId, page: 1);
       
       final List<dynamic> results = response['results'] ?? [];
-      _currentCaseMessages = results.map((e) => CaseMessage.fromJson(e)).toList();
+      final serverMessages = results.map((e) => CaseMessage.fromJson(e)).toList();
+      
+      // 直接用 server 的訊息替換本地訊息（完全以 server 為準）
+      _currentCaseMessages = serverMessages;
+      
     } catch (e) {
       debugPrint('獲取案件消息失敗: $e');
       rethrow;
@@ -162,22 +167,22 @@ class CaseMessageProvider extends ChangeNotifier {
   }
 
   // 發送文字消息（使用真實 API）
+  // 發送後不更新列表，等待輪詢自動同步
   Future<void> sendTextMessage(int caseId, String content) async {
     try {
+      debugPrint('發送文字消息: $content');
+      
       // 調用真實 API 發送消息
-      final response = await ApiService.sendCaseTextMessage(
+      await ApiService.sendCaseTextMessage(
         caseId: caseId,
         content: content,
       );
 
-      // 將服務器返回的消息添加到列表開頭
-      final newMessage = CaseMessage.fromJson(response);
-      _currentCaseMessages.insert(0, newMessage);
+      debugPrint('✅ 文字消息發送成功，等待輪詢同步');
+      // 不更新本地列表，等待定時輪詢自動同步
       
-      notifyListeners();
-      debugPrint('文字消息發送成功');
     } catch (e) {
-      debugPrint('發送文字消息失敗: $e');
+      debugPrint('❌ 發送文字消息失敗: $e');
       rethrow;
     }
   }
@@ -187,7 +192,7 @@ class CaseMessageProvider extends ChangeNotifier {
   /// 流程：
   /// 1. 上传图片到 S3
   /// 2. 调用后端创建图片消息记录
-  /// 3. 更新本地消息列表
+  /// 3. 等待輪詢自動同步
   Future<void> sendImageMessage({
     required int caseId,
     required File imageFile,
@@ -205,19 +210,16 @@ class CaseMessageProvider extends ChangeNotifier {
       );
       
       // 2. 调用后端创建图片消息记录
-      final response = await ApiService.sendCaseImageMessage(
+      await ApiService.sendCaseImageMessage(
         caseId: caseId,
         imageKey: uploadResult['image_key']!,
         imageUrl: uploadResult['image_url']!,
         content: caption,
       );
       
-      // 3. 更新本地消息列表
-      final newMessage = CaseMessage.fromJson(response);
-      _currentCaseMessages.insert(0, newMessage);
-      notifyListeners();
+      debugPrint('✅ 圖片消息發送成功，等待輪詢同步');
+      // 不更新本地列表，等待定時輪詢自動同步
       
-      debugPrint('✅ 圖片消息發送成功 (ID: ${newMessage.id})');
     } catch (e) {
       debugPrint('❌ 發送圖片消息失敗: $e');
       rethrow;

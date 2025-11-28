@@ -33,6 +33,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isKeyboardVisible = false;
+  bool _isSending = false; // 發送中狀態
   Timer? _autoRefreshTimer;
   
   // 全域變數存儲 EditableTextState
@@ -145,8 +146,9 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       
       // 如果權限被拒絕，顯示提示訊息
       if (!granted && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(
             content: const Text('需要相簿權限才能保存圖片，請前往設定開啟'),
             duration: const Duration(seconds: 4),
             action: SnackBarAction(
@@ -155,8 +157,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
                 openAppSettings();
               },
             ),
-          ),
-        );
+          ));
       }
     } catch (e) {
       debugPrint('請求相簿權限失敗: $e');
@@ -165,14 +166,28 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
 
   Future<void> _sendMessage() async {
     final message = _messageController.text.trim();
-    if (message.isEmpty) return;
+    if (message.isEmpty || _isSending) return;
 
     _messageController.clear();
+
+    setState(() {
+      _isSending = true;
+    });
 
     try {
       final provider =
           Provider.of<CaseMessageProvider>(context, listen: false);
       await provider.sendTextMessage(widget.caseId, message);
+
+      // 顯示發送成功提示
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+            content: Text('訊息發送成功'),
+            duration: Duration(milliseconds: 800),
+          ));
+      }
 
       // 滾動到底部
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -182,17 +197,25 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('發送訊息失敗: $e'),
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text('❌ 發送訊息失敗: $e'),
             duration: const Duration(milliseconds: 800),
-          ),
-        );
+          ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
       }
     }
   }
 
   Future<void> _pickAndSendImage() async {
+    if (_isSending) return; // 如果正在發送，不允許再次發送
+    
     try {
       // 顯示選擇來源對話框
       final source = await showDialog<ImageSource>(
@@ -230,25 +253,19 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       
       if (userId == 0) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context)
+            ..removeCurrentSnackBar()
+            ..showSnackBar(const SnackBar(
               content: Text('無法獲取用戶信息'),
               duration: Duration(milliseconds: 800),
-            ),
-          );
+            ));
         }
         return;
       }
-      
-      // 顯示上傳中提示
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('正在上傳圖片到 S3...'),
-            duration: Duration(milliseconds: 800),
-          ),
-        );
-      }
+
+      setState(() {
+        _isSending = true;
+      });
 
       // 真實上傳到 S3 並創建消息
       await provider.sendImageMessage(
@@ -258,33 +275,36 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
         caption: '', // 不顯示文字說明，只顯示圖片
       );
 
+      // 顯示發送成功提示
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+            content: Text('圖片發送成功'),
+            duration: Duration(milliseconds: 800),
+          ));
+      }
+
       // 滾動到底部
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
           _scrollToBottom();
         }
       });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ 圖片發送成功'),
-            backgroundColor: Colors.green,
-            duration: Duration(milliseconds: 800),
-          ),
-        );
-      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(
             content: Text('❌ 發送圖片失敗: $e'),
-            backgroundColor: Colors.red,
             duration: const Duration(milliseconds: 800),
-          ),
-        );
+          ));
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
       }
     }
   }
@@ -371,12 +391,12 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
             Clipboard.setData(
                 ClipboardData(text: selection.textInside(controller.text)));
             ContextMenuController.removeAny();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
+            ScaffoldMessenger.of(context)
+              ..removeCurrentSnackBar()
+              ..showSnackBar(const SnackBar(
                 content: Text('已複製到剪貼簿'),
                 duration: Duration(milliseconds: 800),
-              ),
-            );
+              ));
           },
         ),
       );
@@ -753,16 +773,25 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
             child: CircleAvatar(
               backgroundColor: const Color(0xFF469030),
               radius: 20,
-              child: Transform.translate(
-                offset: const Offset(1, 0),
-                child: IconButton(
-                  icon: const Icon(Icons.send),
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  color: Colors.white,
-                  onPressed: _sendMessage,
-                ),
-              ),
+              child: _isSending
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Transform.translate(
+                      offset: const Offset(1, 0),
+                      child: IconButton(
+                        icon: const Icon(Icons.send),
+                        iconSize: 20,
+                        padding: EdgeInsets.zero,
+                        color: Colors.white,
+                        onPressed: _sendMessage,
+                      ),
+                    ),
             ),
           ),
         ],
@@ -854,10 +883,10 @@ class _FullScreenImageViewer extends StatelessWidget {
       // 如果沒有權限，提示用戶並提供跳轉到設定的選項
       if (!hasPermission) {
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+          ScaffoldMessenger.of(context)
+            ..removeCurrentSnackBar()
+            ..showSnackBar(SnackBar(
               content: const Text('需要相簿權限才能保存圖片'),
-              backgroundColor: Colors.red,
               duration: const Duration(seconds: 4),
               action: SnackBarAction(
                 label: '開啟設定',
@@ -866,20 +895,19 @@ class _FullScreenImageViewer extends StatelessWidget {
                   openAppSettings();
                 },
               ),
-            ),
-          );
+            ));
         }
         return;
       }
 
       // 顯示保存中提示
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
             content: Text('正在保存圖片...'),
             duration: Duration(seconds: 2),
-          ),
-        );
+          ));
       }
 
       SaveResult result;
@@ -912,35 +940,30 @@ class _FullScreenImageViewer extends StatelessWidget {
       }
 
       if (context.mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
         if (result.isSuccess) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('✅ 圖片已保存到相簿'),
-              backgroundColor: Colors.green,
-              duration: Duration(seconds: 2),
-            ),
-          );
+          ScaffoldMessenger.of(context)
+            ..removeCurrentSnackBar()
+            ..showSnackBar(const SnackBar(
+              content: Text('圖片已保存到相簿'),
+              duration: Duration(milliseconds: 800),
+            ));
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
+          ScaffoldMessenger.of(context)
+            ..removeCurrentSnackBar()
+            ..showSnackBar(SnackBar(
               content: Text('❌ 保存圖片失敗: ${result.errorMessage ?? "未知錯誤"}'),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 2),
-            ),
-          );
+              duration: const Duration(milliseconds: 800),
+            ));
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).clearSnackBars();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(
             content: Text('❌ 保存圖片失敗: $e'),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+            duration: const Duration(milliseconds: 800),
+          ));
       }
     }
   }

@@ -37,29 +37,6 @@ class MessageProvider extends ChangeNotifier {
     _messageIds = _messages.map((msg) => msg.id).toSet();
   }
 
-  // Check if a list of messages contains new ones
-  bool _hasNewMessages(List<Message> newMessages) {
-    // If we have no existing messages, definitely has changes
-    if (_messages.isEmpty || _messageIds.isEmpty) {
-      debugPrint('No existing messages, so has changes');
-      return true;
-    }
-    
-    final newIds = newMessages.map((msg) => msg.id).toSet();
-    
-    // Find IDs that are in newIds but not in _messageIds
-    final newlyAdded = newIds.difference(_messageIds);
-    
-    // If there are any new IDs, we have changes
-    final hasChanges = newlyAdded.isNotEmpty;
-    
-    if (hasChanges) {
-      debugPrint('Found ${newlyAdded.length} new message IDs: $newlyAdded');
-    }
-    
-    return hasChanges;
-  }
-
   // For automatic 3-second updates - always fetches page 1 for newest messages
   Future<void> fetchMessages({bool refresh = false}) async {
     // Always log the fetch attempt
@@ -89,72 +66,46 @@ class MessageProvider extends ChangeNotifier {
       final response = await ApiConfig.getMessages(page: pageToFetch);
       
       final List<dynamic> results = response['results'];
-      final newMessages = results.map((e) => Message.fromJson(e)).toList();
+      final serverMessages = results.map((e) => Message.fromJson(e)).toList();
       
       // 提取案件消息未讀數
       if (response.containsKey('case_message_unread_count')) {
         _caseMessageUnreadCount = response['case_message_unread_count'] ?? 0;
       }
       
-      // 檢查是否有臨時訊息需要更新
+      // 檢查是否有臨時訊息（id = -1）
+      Message? tempMessage;
       if (_messages.isNotEmpty && _messages[0].id == -1) {
-        // 找到對應的服務器訊息
-        Message? serverMessage;
-        try {
-          serverMessage = newMessages.firstWhere(
-            (msg) => msg.content == _messages[0].content && !msg.isFromServer,
-          );
-        } catch (e) {
-          // 如果找不到對應的訊息，serverMessage 會保持為 null
-        }
+        tempMessage = _messages[0];
         
-        if (serverMessage != null) {
-          // 更新臨時訊息的 ID
-          _messages[0] = serverMessage;
-          debugPrint('更新臨時訊息 ID: ${serverMessage.id}');
+        // 檢查 server 是否已經有這個訊息
+        final foundInServer = serverMessages.any(
+          (msg) => msg.content == tempMessage!.content && 
+                   msg.isFromServer == tempMessage.isFromServer
+        );
+        
+        if (foundInServer) {
+          debugPrint('臨時訊息已同步到 server，將被移除');
+          tempMessage = null; // server 已經有了，不需要保留臨時訊息
         } else {
-          // 如果找不到對應的服務器訊息，移除臨時訊息
-          _messages.removeAt(0);
-          debugPrint('找不到對應的服務器訊息，移除臨時訊息');
+          debugPrint('臨時訊息尚未同步到 server，保留顯示');
         }
       }
       
-      // Check if there are new messages we don't already have
-      final hasNewMessages = _hasNewMessages(newMessages);
-      final bool hasChanges = refresh || hasNewMessages;
+      // 直接用 server 的訊息替換本地訊息（保持一致性）
+      _messages = List.from(serverMessages);
       
-      if (hasChanges) {
-        if (refresh) {
-          // 保留臨時訊息，只更新其他訊息
-          final tempMessage = _messages.isNotEmpty && _messages[0].id == -1 ? _messages[0] : null;
-          _messages = newMessages;
-          if (tempMessage != null) {
-            _messages.insert(0, tempMessage);
-          }
-        } else {
-          // For regular updates, only add messages we don't already have
-          final messagesMap = {for (var msg in _messages) msg.id: msg};
-          int addedCount = 0;
-          
-          for (final message in newMessages) {
-            if (!messagesMap.containsKey(message.id)) {
-              _messages.add(message);
-              addedCount++;
-            }
-          }
-          
-          // Sort messages by creation time to ensure proper ordering
-          _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        }
-        
-        _updateMessageIds();
-        
-        // Only update _hasMore flag, but don't increment _currentPage here
-        _hasMore = response['next'] != null;
-        
-        // Notify listeners about the changes
-        notifyListeners();
+      // 如果有臨時訊息且 server 還沒同步，加回到最前面
+      if (tempMessage != null) {
+        _messages.insert(0, tempMessage);
       }
+      
+      _updateMessageIds();
+      _hasMore = response['next'] != null;
+      
+      // Notify listeners about the changes
+      notifyListeners();
+      
     } catch (e) {
       debugPrint('Error fetching messages: $e');
       if (shouldShowLoading) {
@@ -248,11 +199,8 @@ class MessageProvider extends ChangeNotifier {
       
       debugPrint('訊息發送成功: ${response['message']}');
       
-      // 等待一下再獲取最新訊息，確保服務器已處理
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Fetch messages to get the real message from server
-      await fetchMessages(refresh: false);
+      // 不主動調用 fetchMessages，等待定時刷新自動同步
+      // 這樣可以避免因延遲導致訊息重複或消失的問題
       
     } catch (e) {
       debugPrint('Error sending message: $e');
