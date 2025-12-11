@@ -40,7 +40,7 @@ class MessageProvider extends ChangeNotifier {
   // For automatic 3-second updates - always fetches page 1 for newest messages
   Future<void> fetchMessages({bool refresh = false}) async {
     // Always log the fetch attempt
-    // debugPrint('Fetching messages at ${DateTime.now()}, refresh=${refresh}');
+    debugPrint('fetchMessages: 被調用 (refresh=$refresh), 當前消息數: ${_messages.length}, currentPage: $_currentPage');
 
     // Always use page 1 for automatic updates
     final int pageToFetch = 1;
@@ -51,6 +51,7 @@ class MessageProvider extends ChangeNotifier {
       _hasMore = true;
       // 不再清空訊息列表，保留臨時訊息
       _messageIds.clear();
+      debugPrint('fetchMessages: refresh=true，重置 currentPage 和 hasMore');
     }
 
     // Only set loading flag when refreshing or emptying the list
@@ -62,46 +63,69 @@ class MessageProvider extends ChangeNotifier {
 
     try {
       // Always make the API call for page 1 to get newest messages
-      // debugPrint('Making API request to fetch newest messages, page=${pageToFetch}');
+      debugPrint('fetchMessages: 請求第 $pageToFetch 頁獲取最新消息');
       final response = await ApiConfig.getMessages(page: pageToFetch);
       
       final List<dynamic> results = response['results'];
       final serverMessages = results.map((e) => Message.fromJson(e)).toList();
+      
+      debugPrint('fetchMessages: 從 API 獲取到 ${serverMessages.length} 條消息');
       
       // 提取案件消息未讀數
       if (response.containsKey('case_message_unread_count')) {
         _caseMessageUnreadCount = response['case_message_unread_count'] ?? 0;
       }
       
-      // 檢查是否有臨時訊息（id = -1）
-      Message? tempMessage;
-      if (_messages.isNotEmpty && _messages[0].id == -1) {
-        tempMessage = _messages[0];
-        
-        // 檢查 server 是否已經有這個訊息
-        final foundInServer = serverMessages.any(
-          (msg) => msg.content == tempMessage!.content && 
-                   msg.isFromServer == tempMessage.isFromServer
-        );
-        
-        if (foundInServer) {
-          debugPrint('臨時訊息已同步到 server，將被移除');
-          tempMessage = null; // server 已經有了，不需要保留臨時訊息
-        } else {
-          debugPrint('臨時訊息尚未同步到 server，保留顯示');
-        }
+      // 統計並移除所有臨時訊息（fetch 成功後，完全以 server 數據為準）
+      final tempMessagesCount = _messages.where((msg) => msg.id < 0).length;
+      if (tempMessagesCount > 0) {
+        debugPrint('fetchMessages: 檢測到 $tempMessagesCount 條臨時訊息，將全部移除（以 server 數據為準）');
       }
       
-      // 直接用 server 的訊息替換本地訊息（保持一致性）
-      _messages = List.from(serverMessages);
-      
-      // 如果有臨時訊息且 server 還沒同步，加回到最前面
-      if (tempMessage != null) {
-        _messages.insert(0, tempMessage);
+      // 如果 currentPage > 1，說明用戶已經加載了更多舊消息
+      // 我們應該只更新第 1 頁的消息，保留其他頁的消息（但排除臨時訊息）
+      if (_currentPage > 1) {
+        debugPrint('fetchMessages: 檢測到已加載多頁消息 (currentPage=$_currentPage)，合併消息列表');
+        
+        // 先移除所有臨時訊息
+        _messages.removeWhere((msg) => msg.id < 0);
+        
+        // 創建一個 Map 來快速查找已有消息
+        final existingMessagesMap = {for (var msg in _messages) msg.id: msg};
+        
+        // 用新的第 1 頁消息更新或添加
+        int updatedCount = 0;
+        int addedCount = 0;
+        
+        for (final serverMsg in serverMessages) {
+          if (existingMessagesMap.containsKey(serverMsg.id)) {
+            // 更新已有消息
+            final index = _messages.indexWhere((m) => m.id == serverMsg.id);
+            if (index != -1) {
+              _messages[index] = serverMsg;
+              updatedCount++;
+            }
+          } else {
+            // 添加新消息
+            _messages.add(serverMsg);
+            addedCount++;
+          }
+        }
+        
+        debugPrint('fetchMessages: 更新了 $updatedCount 條消息，添加了 $addedCount 條新消息');
+        
+        // 重新排序
+        _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      } else {
+        // currentPage = 1，這是初始加載或刷新，直接替換（移除所有臨時訊息）
+        debugPrint('fetchMessages: currentPage=1，直接替換消息列表（移除所有臨時訊息）');
+        _messages = List.from(serverMessages);
       }
       
       _updateMessageIds();
       _hasMore = response['next'] != null;
+      
+      debugPrint('fetchMessages: 完成，總消息數: ${_messages.length}, hasMore: $_hasMore');
       
       // Notify listeners about the changes
       notifyListeners();
@@ -124,7 +148,7 @@ class MessageProvider extends ChangeNotifier {
   Future<void> loadMore() async {
     if (!_isLoading && _hasMore) {
       final nextPage = _currentPage + 1;
-      // debugPrint('Loading older messages, page=${nextPage}');
+      debugPrint('loadMore: 開始加載第 ${nextPage} 頁，當前消息數: ${_messages.length}');
       
       _isLoading = true;
       
@@ -134,7 +158,8 @@ class MessageProvider extends ChangeNotifier {
         final List<dynamic> results = response['results'];
         final olderMessages = results.map((e) => Message.fromJson(e)).toList();
         
-        // debugPrint('Loaded ${olderMessages.length} older messages from page ${nextPage}');
+        debugPrint('loadMore: 從第 ${nextPage} 頁獲取到 ${olderMessages.length} 條消息');
+        debugPrint('loadMore: 當前消息列表中的消息 ID: ${_messages.map((m) => m.id).take(5).join(", ")}...');
         
         if (olderMessages.isNotEmpty) {
           // Only add messages we don't already have
@@ -148,6 +173,8 @@ class MessageProvider extends ChangeNotifier {
             }
           }
           
+          debugPrint('loadMore: 新增了 $addedCount 條消息 (去重後)');
+          
           // Re-sort messages by creation time
           _messages.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           
@@ -155,15 +182,17 @@ class MessageProvider extends ChangeNotifier {
           _hasMore = response['next'] != null;
           _currentPage = nextPage; // Only increment page counter here for pagination
           
+          debugPrint('loadMore: 加載完成，總消息數: ${_messages.length}, hasMore: $_hasMore');
+          
           if (addedCount > 0) {
             notifyListeners();
-            // debugPrint('Added $addedCount older messages, total now: ${_messages.length}');
+            debugPrint('loadMore: 已通知 UI 更新');
           } else {
-            // debugPrint('No new older messages found on page ${nextPage}');
+            debugPrint('loadMore: 沒有新消息，不更新 UI');
           }
         } else {
           _hasMore = false;
-          // debugPrint('No more older messages available');
+          debugPrint('loadMore: 沒有更多舊消息');
         }
       } catch (e) {
         debugPrint('Error loading more messages: $e');
@@ -175,6 +204,8 @@ class MessageProvider extends ChangeNotifier {
       } finally {
         _isLoading = false;
       }
+    } else {
+      debugPrint('loadMore: 跳過加載 (isLoading: $_isLoading, hasMore: $_hasMore)');
     }
   }
 

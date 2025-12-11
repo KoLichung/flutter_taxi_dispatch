@@ -46,3 +46,6 @@ app.*.map.json
 
 # AWS Config - Contains sensitive credentials
 lib/config/aws_config.dart
+
+ios/build/*
+android/build/*

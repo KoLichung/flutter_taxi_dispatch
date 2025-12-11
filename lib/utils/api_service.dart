@@ -17,7 +17,7 @@ class ApiService {
     if (token == null) {
       debugPrint('Warning: No token found in SharedPreferences');
     } else {
-      debugPrint('Using token: ${token.substring(0, 10)}...');
+      debugPrint('Using token: $token');
     }
     final headers = {
       'Content-Type': 'application/json',

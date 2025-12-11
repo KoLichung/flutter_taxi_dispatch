@@ -106,6 +106,7 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       // Schedule scroll to bottom for initial load after messages are fetched
       if (mounted && !_initialScrollDone && messageProvider.messages.isNotEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          debugPrint("_scrollToBottom 調用來源：初始加載");
           _scrollToBottom();
           _initialScrollDone = true;
         });
@@ -171,7 +172,9 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
     
-    debugPrint("auto scroll to bottom");
+    // 添加調用堆棧追蹤
+    debugPrint("=== auto scroll to bottom ===");
+    debugPrint("調用堆棧: ${StackTrace.current.toString().split('\n').take(5).join('\n')}");
     _scrollController.animateTo(
       0, // Scroll to 0 instead of maxScrollExtent for a reversed ListView
       duration: const Duration(milliseconds: 300),
@@ -249,6 +252,7 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
         // 使用SchedulerBinding確保在正確的時機執行滾動
         SchedulerBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
+            debugPrint("_scrollToBottom 調用來源：發送訊息後（wasAtBottom=true）");
             _scrollToBottom();
           }
         });
@@ -495,6 +499,7 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
           // 用戶在底部，自動滾動到底部顯示新消息
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted && _scrollController.hasClients) {
+              debugPrint("_scrollToBottom 調用來源：收到新消息且用戶在底部");
               debugPrint("新消息: 用戶在底部，準備滾動到底部");
               debugPrint("新消息: 滾動前位置: ${_scrollController.offset}");
               _scrollToBottom();
@@ -522,6 +527,7 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     // 鍵盤可見性處理（保留原有邏輯）
     _isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
     if (_isKeyboardVisible && _isAtBottom()) {
+      debugPrint("_scrollToBottom 調用來源：鍵盤可見且在底部");
       Future.microtask(_scrollToBottom);
     }
 

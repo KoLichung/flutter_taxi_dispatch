@@ -7,7 +7,6 @@ import 'providers/message_provider.dart';
 import 'providers/case_message_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/message_screen.dart';
-import 'screens/message_screen_animatedlist.dart';
 import 'utils/push_notification_service.dart';
 
 // 創建一個全局 NavigatorKey

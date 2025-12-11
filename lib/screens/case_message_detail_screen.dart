@@ -310,7 +310,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   }
 
   String _formatTime(DateTime dateTime) {
-    return DateFormat('HH:mm').format(dateTime);
+    return DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 8)));
   }
 
   // 自定義文字選擇選單
