@@ -12,6 +12,7 @@ class CaseMessageListItem {
   final LatestMessage? latestMessage;
   final int unreadCount;
   final DateTime createTime;
+  final String? onAddress; // 案件上車地址
 
   CaseMessageListItem({
     required this.id,
@@ -24,6 +25,7 @@ class CaseMessageListItem {
     this.latestMessage,
     required this.unreadCount,
     required this.createTime,
+    this.onAddress,
   });
 
   factory CaseMessageListItem.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,7 @@ class CaseMessageListItem {
       createTime: json['create_time'] != null
           ? DateTime.parse(json['create_time'])
           : DateTime.now(),
+      onAddress: json['on_address'],
     );
   }
 
@@ -57,6 +60,7 @@ class CaseMessageListItem {
       'latest_message': latestMessage?.toJson(),
       'unread_count': unreadCount,
       'create_time': createTime.toIso8601String(),
+      'on_address': onAddress,
     };
   }
 }

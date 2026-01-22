@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -9,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../models/case_message.dart';
 import '../providers/case_message_provider.dart';
 import '../providers/user_provider.dart';
@@ -16,11 +18,13 @@ import '../providers/user_provider.dart';
 class CaseMessageDetailScreen extends StatefulWidget {
   final int caseId;
   final String caseNumber;
+  final String? pickupAddress; // 案件上車地址（可選）
 
   const CaseMessageDetailScreen({
     super.key,
     required this.caseId,
     required this.caseNumber,
+    this.pickupAddress,
   });
 
   @override
@@ -246,6 +250,35 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       final XFile? image = await _imagePicker.pickImage(source: source);
       if (image == null) return;
 
+      // 跳轉到預覽頁面
+      final shouldSend = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (context) => _ImagePreviewScreen(
+            imagePath: image.path,
+            caseId: widget.caseId,
+          ),
+        ),
+      );
+
+      // 如果用戶確認發送，執行上傳邏輯
+      if (shouldSend == true) {
+        await _sendImageMessage(File(image.path));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(
+            content: Text('❌ 選擇圖片失敗: $e'),
+            duration: const Duration(milliseconds: 800),
+          ));
+      }
+    }
+  }
+
+  // 執行圖片上傳的實際邏輯
+  Future<void> _sendImageMessage(File imageFile) async {
+    try {
       // 獲取 Provider
       final provider = Provider.of<CaseMessageProvider>(context, listen: false);
       final userProvider = Provider.of<UserProvider>(context, listen: false);
@@ -270,7 +303,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       // 真實上傳到 S3 並創建消息
       await provider.sendImageMessage(
         caseId: widget.caseId,
-        imageFile: File(image.path),
+        imageFile: imageFile,
         userId: userId,
         caption: '', // 不顯示文字說明，只顯示圖片
       );
@@ -311,6 +344,88 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
 
   String _formatTime(DateTime dateTime) {
     return DateFormat('HH:mm').format(dateTime.add(const Duration(hours: 8)));
+  }
+
+  // 處理消息中的鏈接，使其可點擊
+  Widget _buildTextWithLinks(String text, bool isUserMessage) {
+    final textColor = isUserMessage ? Colors.white : Colors.black87;
+    final linkColor = isUserMessage ? Colors.white : Colors.blue;
+    
+    // 檢測 http:// 或 https:// 鏈接的正則表達式
+    final urlRegex = RegExp(r'(https?://[^\s]+)', caseSensitive: false);
+    final matches = urlRegex.allMatches(text);
+    
+    if (matches.isEmpty) {
+      // 沒有鏈接，直接返回普通文本
+      return Text(
+        text,
+        style: TextStyle(
+          fontSize: 16,
+          color: textColor,
+        ),
+      );
+    }
+    
+    // 有鏈接，使用 RichText 來顯示可點擊的鏈接
+    final List<TextSpan> spans = [];
+    int lastEnd = 0;
+    
+    for (final match in matches) {
+      // 添加鏈接前的文本
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: text.substring(lastEnd, match.start),
+          style: TextStyle(
+            fontSize: 16,
+            color: textColor,
+          ),
+        ));
+      }
+      
+      // 添加可點擊的鏈接
+      final url = match.group(0)!;
+      spans.add(TextSpan(
+        text: url,
+        style: TextStyle(
+          fontSize: 16,
+          color: linkColor,
+          decoration: TextDecoration.underline,
+        ),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () async {
+            final uri = Uri.parse(url);
+            if (await canLaunchUrl(uri)) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            } else {
+              if (mounted) {
+                ScaffoldMessenger.of(context)
+                  ..removeCurrentSnackBar()
+                  ..showSnackBar(SnackBar(
+                    content: Text('無法打開鏈接: $url'),
+                    duration: const Duration(milliseconds: 800),
+                  ));
+              }
+            }
+          },
+      ));
+      
+      lastEnd = match.end;
+    }
+    
+    // 添加最後的文本
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(
+        text: text.substring(lastEnd),
+        style: TextStyle(
+          fontSize: 16,
+          color: textColor,
+        ),
+      ));
+    }
+    
+    return RichText(
+      text: TextSpan(children: spans),
+    );
   }
 
   // 自定義文字選擇選單
@@ -477,10 +592,20 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
                 widget.caseNumber,
                 style: const TextStyle(fontSize: 16),
               ),
-              const Text(
-                '案件對話',
-                style: TextStyle(fontSize: 12),
-              ),
+              if (widget.pickupAddress != null && widget.pickupAddress!.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    widget.pickupAddress!,
+                    style: const TextStyle(fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              // const Text(
+              //   '案件對話',
+              //   style: TextStyle(fontSize: 12),
+              // ),
             ],
           ),
           centerTitle: true,
@@ -586,38 +711,58 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
                   if (message.content.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text(
+                      child: _buildTextWithLinks(
                         message.content,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color:
-                              isUserMessage ? Colors.white : Colors.black87,
-                        ),
+                        isUserMessage,
                       ),
                     ),
                 ],
               )
             else
               // 文字消息
-              Text(
-                message.content,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: isUserMessage ? Colors.white : Colors.black87,
-                ),
-              ),
+              _buildTextWithLinks(message.content, isUserMessage),
 
             const SizedBox(height: 4),
 
-            // 時間
-            Text(
-              _formatTime(message.createdAt),
-              style: TextStyle(
-                fontSize: 12,
-                color: isUserMessage
-                    ? Colors.white70
-                    : Colors.grey.shade700,
-              ),
+            // 時間和複製按鈕
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _formatTime(message.createdAt),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isUserMessage
+                        ? Colors.white70
+                        : Colors.grey.shade700,
+                  ),
+                ),
+                // 只在文字消息時顯示複製圖標（圖片消息不顯示）
+                if (message.messageType != 'image') ...[
+                  const SizedBox(width: 8),
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: message.content));
+                      // 顯示複製成功提示
+                      ScaffoldMessenger.of(context)
+                        ..removeCurrentSnackBar()
+                        ..showSnackBar(
+                          const SnackBar(
+                            content: Text('已複製訊息'),
+                            duration: Duration(milliseconds: 300),
+                          ),
+                        );
+                    },
+                    child: Icon(
+                      Icons.copy,
+                      size: 16,
+                      color: isUserMessage
+                          ? Colors.white70
+                          : Colors.grey.shade700,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -969,3 +1114,56 @@ class _FullScreenImageViewer extends StatelessWidget {
   }
 }
 
+// 圖片預覽頁面
+class _ImagePreviewScreen extends StatelessWidget {
+  final String imagePath;
+  final int caseId;
+
+  const _ImagePreviewScreen({
+    required this.imagePath,
+    required this.caseId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.close, color: Colors.white),
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.check, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+      body: Center(
+        child: Transform.translate(
+          offset: const Offset(0, -50),
+          child: InteractiveViewer(
+            minScale: 0.5,
+            maxScale: 4.0,
+            child: Image.file(
+              File(imagePath),
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return const Center(
+                  child: Icon(
+                    Icons.broken_image,
+                    size: 100,
+                    color: Colors.white,
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

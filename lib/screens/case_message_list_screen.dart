@@ -207,6 +207,7 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
             builder: (context) => CaseMessageDetailScreen(
               caseId: item.id,
               caseNumber: item.caseNumber,
+              pickupAddress: item.onAddress,
             ),
           ),
         );
