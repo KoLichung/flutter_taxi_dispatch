@@ -19,12 +19,16 @@ class CaseMessageDetailScreen extends StatefulWidget {
   final int caseId;
   final String caseNumber;
   final String? pickupAddress; // 案件上車地址（可選）
+  final int? driverId; // 司機 ID（用於判斷角色）
+  final int? dispatcherId; // 總機 ID（用於判斷角色）
 
   const CaseMessageDetailScreen({
     super.key,
     required this.caseId,
     required this.caseNumber,
     this.pickupAddress,
+    this.driverId,
+    this.dispatcherId,
   });
 
   @override
@@ -86,7 +90,45 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       try {
         debugPrint('案件消息詳情自動刷新中（每 3 秒）');
         final provider = Provider.of<CaseMessageProvider>(context, listen: false);
+        final userProvider = Provider.of<UserProvider>(context, listen: false);
+        final currentUserId = userProvider.user?.id ?? 0;
+        
+        // 先獲取最新消息
         await provider.fetchCaseMessages(widget.caseId, refresh: false);
+        
+        // 檢查是否有未讀消息（非當前用戶發送的）
+        // 根據用戶角色檢查對應的已讀字段
+        final isCurrentUserDriver = widget.driverId != null && 
+                                    widget.driverId == currentUserId;
+        final isCurrentUserDispatcher = widget.dispatcherId != null && 
+                                        widget.dispatcherId == currentUserId;
+        
+        bool hasUnreadMessages = false;
+        if (isCurrentUserDriver) {
+          // 當前用戶是司機，檢查是否有總機發送的消息且司機未讀
+          hasUnreadMessages = provider.currentCaseMessages.any((msg) {
+            return msg.sender != currentUserId && 
+                   !(msg.isReadByDriver ?? false);
+          });
+        } else if (isCurrentUserDispatcher) {
+          // 當前用戶是總機，檢查是否有司機發送的消息且總機未讀
+          hasUnreadMessages = provider.currentCaseMessages.any((msg) {
+            return msg.sender != currentUserId && 
+                   !(msg.isReadByDispatcher ?? false);
+          });
+        } else {
+          // 無法判斷角色，假設是總機
+          hasUnreadMessages = provider.currentCaseMessages.any((msg) {
+            return msg.sender != currentUserId && 
+                   !(msg.isReadByDispatcher ?? false);
+          });
+        }
+        
+        // 如果有未讀消息，自動標記為已讀
+        if (hasUnreadMessages) {
+          debugPrint('檢測到未讀消息，自動標記為已讀');
+          await provider.markMessagesAsRead(widget.caseId);
+        }
       } catch (e) {
         debugPrint('自動刷新失敗: $e');
       }
@@ -666,106 +708,164 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   Widget _buildMessageItem(
       BuildContext context, CaseMessage message, int currentUserId) {
     final isUserMessage = message.isFromCurrentUser(currentUserId);
+    
+    // 判斷當前用戶角色（司機或總機）
+    final isCurrentUserDriver = widget.driverId != null && 
+                                widget.driverId == currentUserId;
+    final isCurrentUserDispatcher = widget.dispatcherId != null && 
+                                     widget.dispatcherId == currentUserId;
+    
+    // 判斷對方是否已讀（僅對自己發送的消息）
+    bool isReadByOther = false;
+    if (isUserMessage) {
+      if (isCurrentUserDriver) {
+        // 當前用戶是司機，檢查總機是否已讀
+        isReadByOther = message.isReadByDispatcher ?? false;
+      } else if (isCurrentUserDispatcher) {
+        // 當前用戶是總機，檢查司機是否已讀
+        isReadByOther = message.isReadByDriver ?? false;
+      }
+      // 如果無法判斷角色，使用舊邏輯（假設是總機）
+      if (!isCurrentUserDriver && !isCurrentUserDispatcher) {
+        isReadByOther = message.isReadByDriver ?? false;
+      }
+    }
 
     return Align(
       alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
       key: ValueKey<int>(message.id),
-      child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
-        ),
-        decoration: BoxDecoration(
-          color: isUserMessage
-              ? const Color(0xFF469030)
-              : Colors.grey.shade200,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 發送者名稱
-            if (!isUserMessage)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Text(
-                  '${message.senderNickName}（${message.senderName}）',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
+      child: Column(
+        crossAxisAlignment: isUserMessage ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          // 左邊：發送者暱稱（在消息框上方）
+          if (!isUserMessage)
+            Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 2),
+              child: Text(
+                message.senderNickName,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-
-            // 圖片消息
-            if (message.messageType == 'image' && message.imageUrl != null)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: _buildImageWidget(message.imageUrl!),
+            ),
+          
+          // 消息框 - 只包含文字內容
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            decoration: BoxDecoration(
+              color: isUserMessage
+                  ? const Color(0xFF469030)
+                  : Colors.grey.shade200,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 圖片消息
+                if (message.messageType == 'image' && message.imageUrl != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: _buildImageWidget(message.imageUrl!),
+                      ),
+                      if (message.content.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: _buildTextWithLinks(
+                            message.content,
+                            isUserMessage,
+                          ),
+                        ),
+                    ],
+                  )
+                else
+                  // 文字消息 - 內容和複製圖標在同一行
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Flexible(
+                        child: _buildTextWithLinks(message.content, isUserMessage),
+                      ),
+                      // 只在文字消息時顯示複製圖標（圖片消息不顯示）
+                      if (message.messageType != 'image') ...[
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () {
+                            Clipboard.setData(ClipboardData(text: message.content));
+                            // 顯示複製成功提示
+                            ScaffoldMessenger.of(context)
+                              ..removeCurrentSnackBar()
+                              ..showSnackBar(
+                                const SnackBar(
+                                  content: Text('已複製訊息'),
+                                  duration: Duration(milliseconds: 300),
+                                ),
+                              );
+                          },
+                          child: Icon(
+                            Icons.copy,
+                            size: 16,
+                            color: isUserMessage
+                                ? Colors.white70
+                                : Colors.grey.shade700,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  if (message.content.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: _buildTextWithLinks(
-                        message.content,
-                        isUserMessage,
+              ],
+            ),
+          ),
+          
+          // 框外信息：時間（左邊）或已讀狀態+時間（右邊）
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                if (!isUserMessage) ...[
+                  // 左邊：時間
+                  Text(
+                    _formatTime(message.createdAt),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ] else ...[
+                  // 右邊：已讀狀態（綠色）和時間
+                  if (isReadByOther) ...[
+                    Text(
+                      '已讀',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: const Color(0xFF469030), // 綠色
                       ),
                     ),
-                ],
-              )
-            else
-              // 文字消息
-              _buildTextWithLinks(message.content, isUserMessage),
-
-            const SizedBox(height: 4),
-
-            // 時間和複製按鈕
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _formatTime(message.createdAt),
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: isUserMessage
-                        ? Colors.white70
-                        : Colors.grey.shade700,
-                  ),
-                ),
-                // 只在文字消息時顯示複製圖標（圖片消息不顯示）
-                if (message.messageType != 'image') ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: message.content));
-                      // 顯示複製成功提示
-                      ScaffoldMessenger.of(context)
-                        ..removeCurrentSnackBar()
-                        ..showSnackBar(
-                          const SnackBar(
-                            content: Text('已複製訊息'),
-                            duration: Duration(milliseconds: 300),
-                          ),
-                        );
-                    },
-                    child: Icon(
-                      Icons.copy,
-                      size: 16,
-                      color: isUserMessage
-                          ? Colors.white70
-                          : Colors.grey.shade700,
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    _formatTime(message.createdAt),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey.shade700,
                     ),
                   ),
                 ],
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -7,8 +7,10 @@ class CaseMessageListItem {
   final String caseState;
   final String driverName;
   final String driverNickName;
+  final int? driverId; // 司機 ID（用於判斷角色）
   final String dispatcherName;
   final String dispatcherNickName;
+  final int? dispatcherId; // 總機 ID（用於判斷角色）
   final LatestMessage? latestMessage;
   final int unreadCount;
   final DateTime createTime;
@@ -20,8 +22,10 @@ class CaseMessageListItem {
     required this.caseState,
     required this.driverName,
     required this.driverNickName,
+    this.driverId,
     required this.dispatcherName,
     required this.dispatcherNickName,
+    this.dispatcherId,
     this.latestMessage,
     required this.unreadCount,
     required this.createTime,
@@ -35,8 +39,10 @@ class CaseMessageListItem {
       caseState: json['case_state'] ?? '',
       driverName: json['driver_name'] ?? '',
       driverNickName: json['driver_nick_name'] ?? '',
+      driverId: json['driver_id'],
       dispatcherName: json['dispatcher_name'] ?? '',
       dispatcherNickName: json['dispatcher_nick_name'] ?? '',
+      dispatcherId: json['dispatcher_id'],
       latestMessage: json['latest_message'] != null
           ? LatestMessage.fromJson(json['latest_message'])
           : null,
@@ -55,8 +61,10 @@ class CaseMessageListItem {
       'case_state': caseState,
       'driver_name': driverName,
       'driver_nick_name': driverNickName,
+      'driver_id': driverId,
       'dispatcher_name': dispatcherName,
       'dispatcher_nick_name': dispatcherNickName,
+      'dispatcher_id': dispatcherId,
       'latest_message': latestMessage?.toJson(),
       'unread_count': unreadCount,
       'create_time': createTime.toIso8601String(),
@@ -123,8 +131,13 @@ class CaseMessage {
   final String content;
   final String? imageUrl;
   final String? imageKey;
-  final bool isRead;
-  final DateTime? readAt;
+  final bool isRead; // 舊字段（向後兼容）
+  final DateTime? readAt; // 舊字段（向後兼容）
+  // V2 雙向已讀字段
+  final bool? isReadByDriver;
+  final DateTime? readByDriverAt;
+  final bool? isReadByDispatcher;
+  final DateTime? readByDispatcherAt;
   final DateTime createdAt;
 
   CaseMessage({
@@ -139,6 +152,10 @@ class CaseMessage {
     this.imageKey,
     required this.isRead,
     this.readAt,
+    this.isReadByDriver,
+    this.readByDriverAt,
+    this.isReadByDispatcher,
+    this.readByDispatcherAt,
     required this.createdAt,
   });
 
@@ -159,6 +176,15 @@ class CaseMessage {
       imageKey: json['image_key'],
       isRead: json['is_read'] ?? false,
       readAt: json['read_at'] != null ? DateTime.parse(json['read_at']) : null,
+      // V2 雙向已讀字段
+      isReadByDriver: json['is_read_by_driver'],
+      readByDriverAt: json['read_by_driver_at'] != null
+          ? DateTime.parse(json['read_by_driver_at'])
+          : null,
+      isReadByDispatcher: json['is_read_by_dispatcher'],
+      readByDispatcherAt: json['read_by_dispatcher_at'] != null
+          ? DateTime.parse(json['read_by_dispatcher_at'])
+          : null,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : DateTime.now(),
@@ -178,8 +204,23 @@ class CaseMessage {
       'image_key': imageKey,
       'is_read': isRead,
       'read_at': readAt?.toIso8601String(),
+      'is_read_by_driver': isReadByDriver,
+      'read_by_driver_at': readByDriverAt?.toIso8601String(),
+      'is_read_by_dispatcher': isReadByDispatcher,
+      'read_by_dispatcher_at': readByDispatcherAt?.toIso8601String(),
       'created_at': createdAt.toIso8601String(),
     };
+  }
+
+  // 判斷消息是否已被對方讀取（根據當前用戶角色）
+  bool isReadByOther(bool isCurrentUserDriver) {
+    if (isCurrentUserDriver) {
+      // 當前用戶是司機，檢查總機是否已讀
+      return isReadByDispatcher ?? false;
+    } else {
+      // 當前用戶是總機，檢查司機是否已讀
+      return isReadByDriver ?? false;
+    }
   }
 }
 

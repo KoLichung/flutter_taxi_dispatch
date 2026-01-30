@@ -463,7 +463,7 @@ class ApiService {
   static Future<Map<String, dynamic>> getCaseMessageList({int page = 1}) async {
     final headers = await _getHeaders();
     try {
-      final url = Uri.parse('$baseUrl/api/dispatch/case-messages/?page=$page');
+      final url = Uri.parse('$baseUrl/api/dispatch/v2/case-messages/?page=$page');
       
       debugPrint('=== 獲取案件消息列表 ===');
       debugPrint('URL: ${url.toString()}');
@@ -509,7 +509,7 @@ class ApiService {
   }) async {
     final headers = await _getHeaders();
     try {
-      final url = Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/?page=$page');
+      final url = Uri.parse('$baseUrl/api/dispatch/v2/cases/$caseId/messages/?page=$page');
       
       debugPrint('=== 獲取案件消息 ===');
       debugPrint('Case ID: $caseId, Page: $page');
@@ -563,7 +563,7 @@ class ApiService {
       debugPrint('Content: ${content.substring(0, content.length > 30 ? 30 : content.length)}...');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/'),
+        Uri.parse('$baseUrl/api/dispatch/v2/cases/$caseId/messages/'),
         headers: headers,
         body: jsonEncode({
           'message_type': 'text',
@@ -605,7 +605,7 @@ class ApiService {
       debugPrint('Case ID: $caseId');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/mark-read/'),
+        Uri.parse('$baseUrl/api/dispatch/v2/cases/$caseId/messages/mark-read/'),
         headers: headers,
       ).timeout(const Duration(seconds: 10));
       
@@ -639,7 +639,7 @@ class ApiService {
   }) async {
     final headers = await _getHeaders();
     try {
-      final url = Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/unread-count/');
+      final url = Uri.parse('$baseUrl/api/dispatch/v2/cases/$caseId/messages/unread-count/');
       
       final response = await http.get(
         url,
@@ -676,7 +676,7 @@ class ApiService {
       debugPrint('Content: ${content ?? ""}');
       
       final response = await http.post(
-        Uri.parse('$baseUrl/api/dispatch/cases/$caseId/messages/'),
+        Uri.parse('$baseUrl/api/dispatch/v2/cases/$caseId/messages/'),
         headers: headers,
         body: jsonEncode({
           'message_type': 'image',

@@ -208,6 +208,8 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
               caseId: item.id,
               caseNumber: item.caseNumber,
               pickupAddress: item.onAddress,
+              driverId: item.driverId,
+              dispatcherId: item.dispatcherId,
             ),
           ),
         );
