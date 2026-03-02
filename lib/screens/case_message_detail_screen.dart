@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
@@ -288,23 +290,32 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
 
       if (source == null) return;
 
-      // 選擇圖片
-      final XFile? image = await _imagePicker.pickImage(source: source);
-      if (image == null) return;
+      // 允許取消後重新選圖 / 拍照（回到相同來源）
+      ImageSource currentSource = source;
+      while (true) {
+        final XFile? image = await _imagePicker.pickImage(source: currentSource);
+        if (image == null) break;
 
-      // 跳轉到預覽頁面
-      final shouldSend = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(
-          builder: (context) => _ImagePreviewScreen(
-            imagePath: image.path,
-            caseId: widget.caseId,
+        // 跳轉到預覽頁面；取消回傳 ImageSource，確認回傳 true
+        final result = await Navigator.of(context).push<dynamic>(
+          MaterialPageRoute(
+            builder: (context) => _ImagePreviewScreen(
+              imagePath: image.path,
+              caseId: widget.caseId,
+              source: currentSource,
+            ),
           ),
-        ),
-      );
+        );
 
-      // 如果用戶確認發送，執行上傳邏輯
-      if (shouldSend == true) {
-        await _sendImageMessage(File(image.path));
+        if (result == true) {
+          await _sendImageMessage(File(image.path));
+          break;
+        } else if (result is ImageSource) {
+          // 用戶按取消，以相同來源重新選圖 / 拍照
+          currentSource = result;
+        } else {
+          break;
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -1215,53 +1226,126 @@ class _FullScreenImageViewer extends StatelessWidget {
 }
 
 // 圖片預覽頁面
-class _ImagePreviewScreen extends StatelessWidget {
+class _ImagePreviewScreen extends StatefulWidget {
   final String imagePath;
   final int caseId;
+  final ImageSource source;
 
   const _ImagePreviewScreen({
     required this.imagePath,
     required this.caseId,
+    required this.source,
   });
 
   @override
+  State<_ImagePreviewScreen> createState() => _ImagePreviewScreenState();
+}
+
+class _ImagePreviewScreenState extends State<_ImagePreviewScreen> {
+  late final Future<Size> _imageSizeFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageSizeFuture = _loadImageDimensions(widget.imagePath);
+  }
+
+  Future<Size> _loadImageDimensions(String path) async {
+    final bytes = await File(path).readAsBytes();
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final size = Size(frame.image.width.toDouble(), frame.image.height.toDouble());
+    frame.image.dispose();
+    codec.dispose();
+    return size;
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(false),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.check, color: Colors.white),
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.white,
+        statusBarIconBrightness: Brightness.dark,
+        statusBarBrightness: Brightness.light,
       ),
-      body: Center(
-        child: Transform.translate(
-          offset: const Offset(0, -50),
-          child: InteractiveViewer(
-            minScale: 0.5,
-            maxScale: 4.0,
-            child: Image.file(
-              File(imagePath),
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) {
-                return const Center(
-                  child: Icon(
-                    Icons.broken_image,
-                    size: 100,
-                    color: Colors.white,
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          systemOverlayStyle: const SystemUiOverlayStyle(
+            statusBarColor: Colors.white,
+            statusBarIconBrightness: Brightness.dark,
+            statusBarBrightness: Brightness.light,
+          ),
+          leading: IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: Colors.black12,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, color: Colors.black, size: 20),
+            ),
+            onPressed: () => Navigator.of(context).pop(widget.source),
+          ),
+          actions: [
+            IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.black12,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.check, color: Colors.black, size: 20),
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final vW = constraints.maxWidth;
+            final vH = constraints.maxHeight;
+            return FutureBuilder<Size>(
+              future: _imageSizeFuture,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  );
+                }
+                final imgW = snapshot.data!.width;
+                final imgH = snapshot.data!.height;
+
+                final scaleW = vW / imgW;
+                final scaleH = vH / imgH;
+                final maxScale = math.max(scaleW, scaleH) / math.min(scaleW, scaleH);
+
+                return InteractiveViewer(
+                  minScale: 1.0,
+                  maxScale: math.max(maxScale, 2.0),
+                  child: SizedBox(
+                    width: vW,
+                    height: vH,
+                    child: Image.file(
+                      File(widget.imagePath),
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(
+                            Icons.broken_image,
+                            size: 100,
+                            color: Colors.white,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 );
               },
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

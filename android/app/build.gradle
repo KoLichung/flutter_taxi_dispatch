@@ -7,6 +7,15 @@ plugins {
     id "com.google.gms.google-services"
 }
 
+// Read version from pubspec.yaml so Android Studio builds also pick up the correct version.
+def pubspecVersion = {
+    def pubspec = new File(rootProject.projectDir, "../pubspec.yaml")
+    def versionLine = pubspec.readLines().find { it.startsWith("version:") }
+    def raw = versionLine?.split(":")?.last()?.trim() ?: "1.0.0+1"
+    def parts = raw.tokenize("+")
+    return [name: parts[0].trim(), code: (parts.size() > 1 ? parts[1].trim().toInteger() : 1)]
+}()
+
 android {
     namespace = "com.chijia.fluttertaxi24dispatch.flutter_taxi_24_dispatch"
     compileSdk = flutter.compileSdkVersion
@@ -28,8 +37,8 @@ android {
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = pubspecVersion.code
+        versionName = pubspecVersion.name
     }
 
     buildTypes {
