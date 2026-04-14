@@ -15,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'profile_screen.dart';
 import 'search_message_screen.dart';
 import 'case_message_list_screen.dart';
@@ -37,6 +38,8 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
   bool _isLoadingMore = false;
   bool _isKeyboardVisible = false;
   bool _showScrollButton = false;
+  final AudioPlayer _carArrivalPlayer = AudioPlayer();
+  final Set<int> _playedCarArrivalMessageIds = <int>{};
   
   // Flag to track if the initial scroll to bottom has been done
   bool _initialScrollDone = false;
@@ -75,7 +78,33 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _timer?.cancel();
+    _carArrivalPlayer.dispose();
     super.dispose();
+  }
+
+  bool _isCarArrivalMessage(String content) {
+    return content.contains('車輛預估') && content.contains('分鐘到達');
+  }
+
+  Future<void> _playCarArrivalSoundIfNeeded(List<Message> messages) async {
+    final unplayedArrivalMessages = messages.where((message) {
+      return message.isFromServer &&
+          _isCarArrivalMessage(message.content) &&
+          !_playedCarArrivalMessageIds.contains(message.id);
+    }).toList();
+
+    if (unplayedArrivalMessages.isEmpty) return;
+
+    for (final message in unplayedArrivalMessages) {
+      _playedCarArrivalMessageIds.add(message.id);
+    }
+
+    try {
+      await _carArrivalPlayer.stop();
+      await _carArrivalPlayer.play(AssetSource('get_car_sound.mp3'));
+    } catch (e) {
+      debugPrint('播放派車音效失敗: $e');
+    }
   }
 
   // 當從其他頁面返回到此頁面時調用
@@ -447,9 +476,11 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     // 檢查消息列表是否變化
     final currentMessages = messageProvider.messages;
     final messagesChanged = !const ListEquality().equals(_previousMessages, currentMessages);
+    final previousMessageIds = _previousMessages.map((m) => m.id).toSet();
     
     // 標記是否需要恢復滾動位置（僅針對新消息情況）
     bool shouldRestorePosition = false;
+    int? highestPreviousId;
     
     if (messagesChanged) {
       // 檢查是否有新消息（ID更高的消息）
@@ -457,11 +488,11 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       
       if (_previousMessages.isNotEmpty && currentMessages.isNotEmpty) {
         // 從_previousMessages獲取最高ID
-        final highestPreviousId = _previousMessages[0].id;
+        highestPreviousId = _previousMessages[0].id;
         
         // 檢查是否有消息ID高於現有的最高ID
         for (final message in currentMessages) {
-          if (message.id > highestPreviousId && !_previousMessages.map((m) => m.id).contains(message.id)) {
+          if (message.id > highestPreviousId! && !_previousMessages.map((m) => m.id).contains(message.id)) {
             hasActuallyNewMessages = true;
             debugPrint("新消息: 發現ID更高的消息: ${message.id} > $highestPreviousId");
             break;
@@ -478,6 +509,17 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       
       // 新消息到達且初始加載已完成且不是在加載更多舊消息
       if (hasActuallyNewMessages && _initialScrollDone && !_isLoadingMore) {
+        final newlyArrivedMessages = currentMessages.where((message) {
+          return highestPreviousId != null &&
+              message.id > highestPreviousId &&
+              !previousMessageIds.contains(message.id);
+        }).toList();
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _playCarArrivalSoundIfNeeded(newlyArrivedMessages);
+        });
+
         // 用戶不在底部，顯示新消息按鈕並準備恢復滾動位置
         if (!_isAtBottom()) {
           debugPrint("got new message");

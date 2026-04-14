@@ -56,6 +56,7 @@ dependencies:
   # 圖片保存
   saver_gallery: ^4.0.1
   permission_handler: ^11.3.1
+  audioplayers: ^6.4.0
 
 dev_dependencies:
   flutter_test:
@@ -78,6 +79,9 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+  assets:
+    - assets/chat_sound.mp3
+    - assets/get_car_sound.mp3
 
   # To add assets to your application, add an assets section, like this:
   # assets:

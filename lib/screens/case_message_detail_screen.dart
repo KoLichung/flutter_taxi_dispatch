@@ -13,6 +13,7 @@ import 'package:saver_gallery/saver_gallery.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:audioplayers/audioplayers.dart';
 import '../models/case_message.dart';
 import '../providers/case_message_provider.dart';
 import '../providers/user_provider.dart';
@@ -45,6 +46,9 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   bool _isKeyboardVisible = false;
   bool _isSending = false; // 發送中狀態
   Timer? _autoRefreshTimer;
+  final AudioPlayer _chatPlayer = AudioPlayer();
+  final Set<int> _playedIncomingMessageIds = <int>{};
+  bool _hasInitializedSoundBaseline = false;
   
   // 全域變數存儲 EditableTextState
   EditableTextState? _currentEditableTextState;
@@ -53,10 +57,16 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider =
           Provider.of<CaseMessageProvider>(context, listen: false);
-      provider.fetchCaseMessages(widget.caseId, refresh: true);
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final currentUserId = userProvider.user?.id ?? 0;
+      await provider.fetchCaseMessages(widget.caseId, refresh: true);
+      _initializeSoundBaseline(
+        messages: provider.currentCaseMessages,
+        currentUserId: currentUserId,
+      );
       
       // 標記消息為已讀
       provider.markMessagesAsRead(widget.caseId);
@@ -81,7 +91,36 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
     _autoRefreshTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
+    _chatPlayer.dispose();
     super.dispose();
+  }
+
+  void _initializeSoundBaseline({
+    required List<CaseMessage> messages,
+    required int currentUserId,
+  }) {
+    for (final message in messages) {
+      if (message.sender != currentUserId) {
+        _playedIncomingMessageIds.add(message.id);
+      }
+    }
+    _hasInitializedSoundBaseline = true;
+  }
+
+  Future<void> _playChatSoundForNewIncomingMessages(
+      List<CaseMessage> newIncomingMessages) async {
+    if (newIncomingMessages.isEmpty) return;
+
+    for (final message in newIncomingMessages) {
+      _playedIncomingMessageIds.add(message.id);
+    }
+
+    try {
+      await _chatPlayer.stop();
+      await _chatPlayer.play(AssetSource('chat_sound.mp3'));
+    } catch (e) {
+      debugPrint('播放聊天提示音失敗: $e');
+    }
   }
   
   void _startAutoRefresh() {
@@ -94,9 +133,20 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
         final provider = Provider.of<CaseMessageProvider>(context, listen: false);
         final userProvider = Provider.of<UserProvider>(context, listen: false);
         final currentUserId = userProvider.user?.id ?? 0;
+        final previousMessageIds =
+            provider.currentCaseMessages.map((msg) => msg.id).toSet();
         
         // 先獲取最新消息
         await provider.fetchCaseMessages(widget.caseId, refresh: false);
+
+        if (_hasInitializedSoundBaseline) {
+          final newIncomingMessages = provider.currentCaseMessages.where((msg) {
+            return !previousMessageIds.contains(msg.id) &&
+                msg.sender != currentUserId &&
+                !_playedIncomingMessageIds.contains(msg.id);
+          }).toList();
+          await _playChatSoundForNewIncomingMessages(newIncomingMessages);
+        }
         
         // 檢查是否有未讀消息（非當前用戶發送的）
         // 根據用戶角色檢查對應的已讀字段
