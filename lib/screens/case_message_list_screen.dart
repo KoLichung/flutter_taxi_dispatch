@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/case_message.dart';
+import '../services/app_sound_player.dart';
 import '../providers/case_message_provider.dart';
 import 'case_message_detail_screen.dart';
 import '../main.dart' show routeObserver;
@@ -17,6 +18,8 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
   final ScrollController _scrollController = ScrollController();
   CaseMessageProvider? _provider; // 保存 provider 引用
   bool _isInitialized = false; // 標記是否已初始化
+  final Map<int, int> _lastUnreadCountByCaseId = <int, int>{};
+  bool _caseUnreadSoundBaselineReady = false;
 
   @override
   void initState() {
@@ -62,6 +65,46 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  Future<void> _playCaseUnreadChatSound() async {
+    await AppSoundPlayer.instance.playChatNotification();
+  }
+
+  void _handleCaseUnreadCountChanges(
+    List<CaseMessageListItem> items, {
+    required bool isLoading,
+  }) {
+    if (isLoading && items.isEmpty) {
+      return;
+    }
+
+    if (!_caseUnreadSoundBaselineReady) {
+      _lastUnreadCountByCaseId
+        ..clear()
+        ..addEntries(items.map((e) => MapEntry(e.id, e.unreadCount)));
+      _caseUnreadSoundBaselineReady = true;
+      return;
+    }
+
+    var shouldPlay = false;
+    for (final item in items) {
+      final previous = _lastUnreadCountByCaseId[item.id];
+      if (previous != null && item.unreadCount > previous) {
+        shouldPlay = true;
+      }
+      _lastUnreadCountByCaseId[item.id] = item.unreadCount;
+    }
+
+    final currentIds = items.map((e) => e.id).toSet();
+    _lastUnreadCountByCaseId.removeWhere((id, _) => !currentIds.contains(id));
+
+    if (shouldPlay) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _playCaseUnreadChatSound();
+      });
+    }
   }
 
   // 當從其他頁面返回到此頁面時調用
@@ -143,6 +186,10 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
   @override
   Widget build(BuildContext context) {
     final provider = Provider.of<CaseMessageProvider>(context);
+    _handleCaseUnreadCountChanges(
+      provider.caseMessageList,
+      isLoading: provider.isLoading,
+    );
 
     return Scaffold(
       appBar: AppBar(

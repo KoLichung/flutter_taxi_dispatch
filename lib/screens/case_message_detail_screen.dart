@@ -13,8 +13,8 @@ import 'package:saver_gallery/saver_gallery.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:audioplayers/audioplayers.dart';
 import '../models/case_message.dart';
+import '../services/app_sound_player.dart';
 import '../providers/case_message_provider.dart';
 import '../providers/user_provider.dart';
 
@@ -40,13 +40,20 @@ class CaseMessageDetailScreen extends StatefulWidget {
 }
 
 class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
+  static const List<String> _quickMessagePhrases = [
+    '收到',
+    '催',
+    '客未見拍照',
+    '剩幾分抵達',
+    '趕一下🙏',
+  ];
+
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
   bool _isKeyboardVisible = false;
   bool _isSending = false; // 發送中狀態
   Timer? _autoRefreshTimer;
-  final AudioPlayer _chatPlayer = AudioPlayer();
   final Set<int> _playedIncomingMessageIds = <int>{};
   bool _hasInitializedSoundBaseline = false;
   
@@ -91,7 +98,6 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
     _autoRefreshTimer?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
-    _chatPlayer.dispose();
     super.dispose();
   }
 
@@ -115,12 +121,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
       _playedIncomingMessageIds.add(message.id);
     }
 
-    try {
-      await _chatPlayer.stop();
-      await _chatPlayer.play(AssetSource('chat_sound.mp3'));
-    } catch (e) {
-      debugPrint('播放聊天提示音失敗: $e');
-    }
+    await AppSoundPlayer.instance.playChatNotification();
   }
   
   void _startAutoRefresh() {
@@ -309,6 +310,17 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
         });
       }
     }
+  }
+
+  /// 將快捷片語接在輸入框文字末尾（不刪除既有內容、不插入空格）。
+  void _appendQuickPhrase(String phrase) {
+    final value = _messageController.value;
+    final newText = value.text + phrase;
+    _messageController.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: newText.length),
+      composing: TextRange.empty,
+    );
   }
 
   Future<void> _pickAndSendImage() async {
@@ -1003,102 +1015,135 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
           ),
         ],
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 圖片按鈕
-          IconButton(
-            icon: const Icon(Icons.image, color: Color(0xFF469030)),
-            onPressed: _pickAndSendImage,
-          ),
-
-          const SizedBox(width: 8),
-
-          // 文字輸入框
-          Expanded(
-            child: GestureDetector(
-              onDoubleTap: () {
-                if (_messageController.text.isNotEmpty) {
-                  final cursorOffset = _messageController.selection.baseOffset;
-                  final text = _messageController.text;
-
-                  int lineStart = cursorOffset;
-                  while (lineStart > 0 && text[lineStart - 1] != '\n') {
-                    lineStart--;
-                  }
-
-                  int lineEnd = cursorOffset;
-                  while (lineEnd < text.length && text[lineEnd] != '\n') {
-                    lineEnd++;
-                  }
-
-                  _messageController.selection = TextSelection(
-                    baseOffset: lineStart,
-                    extentOffset: lineEnd,
-                  );
-
-                  Future.delayed(const Duration(milliseconds: 50), () {
-                    if (_currentEditableTextState != null &&
-                        _currentEditableTextState!.mounted) {
-                      _currentEditableTextState!.showToolbar();
-                    }
-                  });
-                }
-              },
-              child: TextField(
-                controller: _messageController,
-                decoration: InputDecoration(
-                  hintText: '輸入訊息...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (int i = 0; i < _quickMessagePhrases.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  OutlinedButton(
+                    onPressed: () => _appendQuickPhrase(_quickMessagePhrases[i]),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      foregroundColor: const Color(0xFF469030),
+                      side: const BorderSide(color: Color(0xFF469030)),
+                    ),
+                    child: Text(_quickMessagePhrases[i]),
                   ),
-                  filled: true,
-                  fillColor: Colors.grey.shade100,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 12,
-                  ),
-                ),
-                textInputAction: TextInputAction.newline,
-                keyboardType: TextInputType.multiline,
-                maxLines: null,
-                contextMenuBuilder: (context, editableTextState) {
-                  _currentEditableTextState = editableTextState;
-                  return _buildContextMenu(
-                      context, _currentEditableTextState!);
-                },
-              ),
+                ],
+              ],
             ),
           ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              // 圖片按鈕
+              IconButton(
+                icon: const Icon(Icons.image, color: Color(0xFF469030)),
+                onPressed: _pickAndSendImage,
+              ),
 
-          const SizedBox(width: 12),
+              const SizedBox(width: 8),
 
-          // 發送按鈕
-          Container(
-            margin: const EdgeInsets.only(right: 4),
-            child: CircleAvatar(
-              backgroundColor: const Color(0xFF469030),
-              radius: 20,
-              child: _isSending
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              // 文字輸入框
+              Expanded(
+                child: GestureDetector(
+                  onDoubleTap: () {
+                    if (_messageController.text.isNotEmpty) {
+                      final cursorOffset =
+                          _messageController.selection.baseOffset;
+                      final text = _messageController.text;
+
+                      int lineStart = cursorOffset;
+                      while (lineStart > 0 && text[lineStart - 1] != '\n') {
+                        lineStart--;
+                      }
+
+                      int lineEnd = cursorOffset;
+                      while (lineEnd < text.length && text[lineEnd] != '\n') {
+                        lineEnd++;
+                      }
+
+                      _messageController.selection = TextSelection(
+                        baseOffset: lineStart,
+                        extentOffset: lineEnd,
+                      );
+
+                      Future.delayed(const Duration(milliseconds: 50), () {
+                        if (_currentEditableTextState != null &&
+                            _currentEditableTextState!.mounted) {
+                          _currentEditableTextState!.showToolbar();
+                        }
+                      });
+                    }
+                  },
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: '輸入訊息...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
                       ),
-                    )
-                  : Transform.translate(
-                      offset: const Offset(1, 0),
-                      child: IconButton(
-                        icon: const Icon(Icons.send),
-                        iconSize: 20,
-                        padding: EdgeInsets.zero,
-                        color: Colors.white,
-                        onPressed: _sendMessage,
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 12,
                       ),
                     ),
-            ),
+                    textInputAction: TextInputAction.newline,
+                    keyboardType: TextInputType.multiline,
+                    maxLines: null,
+                    contextMenuBuilder: (context, editableTextState) {
+                      _currentEditableTextState = editableTextState;
+                      return _buildContextMenu(
+                          context, _currentEditableTextState!);
+                    },
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              // 發送按鈕
+              Container(
+                margin: const EdgeInsets.only(right: 4),
+                child: CircleAvatar(
+                  backgroundColor: const Color(0xFF469030),
+                  radius: 20,
+                  child: _isSending
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                                AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : Transform.translate(
+                          offset: const Offset(1, 0),
+                          child: IconButton(
+                            icon: const Icon(Icons.send),
+                            iconSize: 20,
+                            padding: EdgeInsets.zero,
+                            color: Colors.white,
+                            onPressed: _sendMessage,
+                          ),
+                        ),
+                ),
+              ),
+            ],
           ),
         ],
       ),

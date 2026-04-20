@@ -8,18 +8,11 @@ import '../models/message.dart';
 import '../providers/message_provider.dart';
 import '../providers/user_provider.dart';
 import 'dart:async';
-import '../utils/api_config.dart';
-import '../utils/api_service.dart';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'profile_screen.dart';
+import '../services/app_sound_player.dart';
 import 'search_message_screen.dart';
 import 'case_message_list_screen.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:badges/badges.dart' as badges;
 import '../main.dart' show routeObserver;
 
@@ -38,8 +31,9 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
   bool _isLoadingMore = false;
   bool _isKeyboardVisible = false;
   bool _showScrollButton = false;
-  final AudioPlayer _carArrivalPlayer = AudioPlayer();
   final Set<int> _playedCarArrivalMessageIds = <int>{};
+  int _lastCaseMessageUnreadCount = 0;
+  bool _caseUnreadSoundBaselineReady = false;
   
   // Flag to track if the initial scroll to bottom has been done
   bool _initialScrollDone = false;
@@ -78,7 +72,6 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _timer?.cancel();
-    _carArrivalPlayer.dispose();
     super.dispose();
   }
 
@@ -99,12 +92,11 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       _playedCarArrivalMessageIds.add(message.id);
     }
 
-    try {
-      await _carArrivalPlayer.stop();
-      await _carArrivalPlayer.play(AssetSource('get_car_sound.mp3'));
-    } catch (e) {
-      debugPrint('播放派車音效失敗: $e');
-    }
+    await AppSoundPlayer.instance.playCarArrival();
+  }
+
+  Future<void> _playCaseUnreadChatSound() async {
+    await AppSoundPlayer.instance.playChatNotification();
   }
 
   // 當從其他頁面返回到此頁面時調用
@@ -130,6 +122,8 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       // 初始化_previousMessages，以便後續比較
       if (mounted) {
         _previousMessages = List.from(messageProvider.messages);
+        _lastCaseMessageUnreadCount = messageProvider.caseMessageUnreadCount;
+        _caseUnreadSoundBaselineReady = true;
       }
       
       // Schedule scroll to bottom for initial load after messages are fetched
@@ -314,7 +308,7 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
   // 自定義文字選擇選單
   Widget _buildContextMenu(BuildContext context, EditableTextState editableTextState) {
     final List<ContextMenuButtonItem> buttonItems = [];
-    final TextEditingController controller = editableTextState.widget.controller!;
+    final TextEditingController controller = editableTextState.widget.controller;
     final TextSelection selection = editableTextState.currentTextEditingValue.selection;
 
     // 只有在沒有選中文字時，才顯示"全選"和"選取"按鈕
@@ -466,7 +460,17 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final messageProvider = Provider.of<MessageProvider>(context);
-    final username = userProvider.user?.nickName ?? userProvider.user?.phone ?? '用戶';
+    final caseUnreadCount = messageProvider.caseMessageUnreadCount;
+
+    if (_caseUnreadSoundBaselineReady) {
+      if (caseUnreadCount > _lastCaseMessageUnreadCount) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _playCaseUnreadChatSound();
+        });
+      }
+      _lastCaseMessageUnreadCount = caseUnreadCount;
+    }
     
     // 只在非加載更多狀態下保存滾動位置（針對新消息到達的情況）
     final currentScrollPosition = !_isLoadingMore && _scrollController.hasClients 
@@ -488,13 +492,15 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       
       if (_previousMessages.isNotEmpty && currentMessages.isNotEmpty) {
         // 從_previousMessages獲取最高ID
-        highestPreviousId = _previousMessages[0].id;
+        final baselineId = _previousMessages[0].id;
+        highestPreviousId = baselineId;
         
         // 檢查是否有消息ID高於現有的最高ID
         for (final message in currentMessages) {
-          if (message.id > highestPreviousId! && !_previousMessages.map((m) => m.id).contains(message.id)) {
+          if (message.id > baselineId &&
+              !_previousMessages.map((m) => m.id).contains(message.id)) {
             hasActuallyNewMessages = true;
-            debugPrint("新消息: 發現ID更高的消息: ${message.id} > $highestPreviousId");
+            debugPrint("新消息: 發現ID更高的消息: ${message.id} > $baselineId");
             break;
           }
         }
