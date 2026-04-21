@@ -8,7 +8,11 @@ import '../models/message.dart';
 import '../providers/message_provider.dart';
 import '../providers/user_provider.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../utils/api_config.dart';
 import 'profile_screen.dart';
 import '../services/app_sound_player.dart';
 import 'search_message_screen.dart';
@@ -24,6 +28,9 @@ class MessageScreen extends StatefulWidget {
 }
 
 class _MessageScreenState extends State<MessageScreen> with RouteAware {
+  static const String _appStoreDispatchUrl =
+      'https://apps.apple.com/tw/app/24h%E5%8F%AB%E8%BB%8A/id6745320401';
+
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   Timer? _timer;
@@ -50,9 +57,85 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     _clearNotifications();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _getLatestAppVersion();
       _initMessages();
       _startAutoFetch();
     });
+  }
+
+  Future<void> _getLatestAppVersion() async {
+    if (!mounted) return;
+    if (!Platform.isIOS && !Platform.isAndroid) return;
+
+    try {
+      final map = await ApiConfig.getCurrentVersion();
+      final packageInfo = await PackageInfo.fromPlatform();
+      final localBuild = int.tryParse(packageInfo.buildNumber) ?? 0;
+
+      final String? rawDispatch = Platform.isIOS
+          ? map['ios_dispatch']?.toString()
+          : map['android_dispatch']?.toString();
+      final serverBuild = int.tryParse(rawDispatch ?? '');
+      if (serverBuild == null) {
+        debugPrint('_getLatestAppVersion: 無法解析伺服器版號 ($rawDispatch)');
+        return;
+      }
+      if (localBuild >= serverBuild) return;
+      if (!mounted) return;
+
+      await showDialog<void>(
+        barrierDismissible: false,
+        context: context,
+        builder: (BuildContext dialogContext) {
+          if (Platform.isIOS) {
+            return PopScope(
+              canPop: false,
+              child: AlertDialog(
+                contentPadding: const EdgeInsets.all(20),
+                content: const Text('有新的 App 版本，請立即更新'),
+                actionsAlignment: MainAxisAlignment.center,
+                actions: [
+                  TextButton(
+                    child: const Text('前往更新'),
+                    onPressed: () async {
+                      final uri = Uri.parse(_appStoreDispatchUrl);
+                      final ok = await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                      // 成功也不關閉對話框，從 App Store 返回後仍須看到（強制更新）
+                      if (!ok && dialogContext.mounted) {
+                        ScaffoldMessenger.of(dialogContext).showSnackBar(
+                          SnackBar(content: Text('無法開啟商店連結: $uri')),
+                        );
+                      }
+                    },
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return PopScope(
+            canPop: false,
+            child: AlertDialog(
+              contentPadding: const EdgeInsets.all(20),
+              content: const Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('有新的 App 版本，請立即更新'),
+                  SizedBox(height: 12),
+                  Text('請向管理員取得更新連結'),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e, st) {
+      debugPrint('_getLatestAppVersion 失敗: $e\n$st');
+    }
   }
 
   @override

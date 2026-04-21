@@ -38,6 +38,11 @@ class ApiConfig {
   }
 
   // FCM 推播相關 API
+  /// 伺服器設定的各平台目前版號（含 dispatch 專用欄位）
+  static Future<Map<String, dynamic>> getCurrentVersion() {
+    return ApiService.getCurrentVersion();
+  }
+
   static Future<Map<String, dynamic>> registerFCMDevice({
     required String registrationId,
     required String deviceId,

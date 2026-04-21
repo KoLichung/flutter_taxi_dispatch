@@ -710,5 +710,32 @@ class ApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> getCurrentVersion() async {
+    final headers = await _getHeaders();
+    try {
+      final url = Uri.parse('$baseUrl/api/get_current_version');
+      debugPrint('getCurrentVersion: GET $url');
+      final response = await http
+          .get(url, headers: headers)
+          .timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decoded = jsonDecode(responseBody);
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+        throw Exception('取得版本資訊: 回應格式錯誤');
+      }
+      debugPrint('getCurrentVersion: ${response.statusCode} ${response.body}');
+      throw Exception('取得版本資訊失敗: ${response.statusCode}');
+    } on TimeoutException {
+      debugPrint('getCurrentVersion: timeout');
+      throw Exception('取得版本資訊逾時');
+    }
+  }
+
 
 } 
