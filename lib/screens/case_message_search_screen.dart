@@ -1,26 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/case_message.dart';
-import '../services/app_sound_player.dart';
-import '../providers/case_message_provider.dart';
+import '../utils/api_service.dart';
 import 'case_message_detail_screen.dart';
-import 'case_message_search_screen.dart';
-import '../main.dart' show routeObserver;
 
-class CaseMessageListScreen extends StatefulWidget {
-  const CaseMessageListScreen({super.key});
+class CaseMessageSearchScreen extends StatefulWidget {
+  const CaseMessageSearchScreen({super.key});
 
   @override
-  State<CaseMessageListScreen> createState() => _CaseMessageListScreenState();
+  State<CaseMessageSearchScreen> createState() =>
+      _CaseMessageSearchScreenState();
 }
 
-class _CaseMessageListScreenState extends State<CaseMessageListScreen> with RouteAware {
+class _CaseMessageSearchScreenState extends State<CaseMessageSearchScreen> {
+  final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  CaseMessageProvider? _provider; // 保存 provider 引用
-  bool _isInitialized = false; // 標記是否已初始化
-  final Map<int, int> _lastUnreadCountByCaseId = <int, int>{};
-  bool _caseUnreadSoundBaselineReady = false;
+  final FocusNode _focusNode = FocusNode();
+
+  List<CaseMessageListItem> _results = [];
+  bool _isLoading = false;
+  bool _isLoadingMore = false;
+  bool _hasMore = false;
+  int _currentPage = 1;
+  String _lastQuery = '';
+  bool _hasSearched = false;
 
   @override
   void initState() {
@@ -29,106 +32,85 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
   }
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    
-    // 保存 provider 引用
-    if (_provider == null) {
-      _provider = Provider.of<CaseMessageProvider>(context, listen: false);
-    }
-    
-    // 註冊 RouteAware，以便監聽頁面可見性變化
-    final route = ModalRoute.of(context);
-    if (route is PageRoute) {
-      routeObserver.subscribe(this, route);
-    }
-    
-    // 初始化並啟動自動刷新（只在第一次時）
-    // 使用 postFrameCallback 延遲到 build 完成後執行，避免在 build 期間調用 notifyListeners
-    if (!_isInitialized && _provider != null) {
-      _isInitialized = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _provider!.fetchCaseMessageList(refresh: true);
-          _provider!.startAutoRefresh();
-        }
-      });
-    }
-  }
-
-  @override
   void dispose() {
-    routeObserver.unsubscribe(this);
-    
-    // 使用保存的 provider 引用停止自動刷新
-    _provider?.stopAutoRefresh();
-    
+    _searchController.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
-  }
-
-  Future<void> _playCaseUnreadChatSound() async {
-    await AppSoundPlayer.instance.playChatNotification();
-  }
-
-  void _handleCaseUnreadCountChanges(
-    List<CaseMessageListItem> items, {
-    required bool isLoading,
-  }) {
-    if (isLoading && items.isEmpty) {
-      return;
-    }
-
-    if (!_caseUnreadSoundBaselineReady) {
-      _lastUnreadCountByCaseId
-        ..clear()
-        ..addEntries(items.map((e) => MapEntry(e.id, e.unreadCount)));
-      _caseUnreadSoundBaselineReady = true;
-      return;
-    }
-
-    var shouldPlay = false;
-    for (final item in items) {
-      final previous = _lastUnreadCountByCaseId[item.id];
-      if (previous != null && item.unreadCount > previous) {
-        shouldPlay = true;
-      }
-      _lastUnreadCountByCaseId[item.id] = item.unreadCount;
-    }
-
-    final currentIds = items.map((e) => e.id).toSet();
-    _lastUnreadCountByCaseId.removeWhere((id, _) => !currentIds.contains(id));
-
-    if (shouldPlay) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _playCaseUnreadChatSound();
-      });
-    }
-  }
-
-  // 當從其他頁面返回到此頁面時調用
-  @override
-  void didPopNext() {
-    debugPrint('CaseMessageListScreen: 返回此頁面，重新啟動 timer');
-    _provider?.startAutoRefresh();
-  }
-
-  // 當從此頁面跳轉到其他頁面時調用
-  @override
-  void didPushNext() {
-    debugPrint('CaseMessageListScreen: 離開此頁面，停止 timer');
-    _provider?.stopAutoRefresh();
   }
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      // 接近底部時加載更多
-      final provider = Provider.of<CaseMessageProvider>(context, listen: false);
-      if (!provider.isLoadingMore && provider.hasMore) {
-        provider.loadMoreCases();
+      if (!_isLoadingMore && _hasMore) {
+        _loadMore();
+      }
+    }
+  }
+
+  Future<void> _search({bool fromButton = false}) async {
+    final query = _searchController.text.trim();
+    if (_isLoading) return;
+
+    _focusNode.unfocus();
+    setState(() {
+      _isLoading = true;
+      _hasSearched = true;
+      _results = [];
+      _currentPage = 1;
+      _hasMore = false;
+      _lastQuery = query;
+    });
+
+    try {
+      final response =
+          await ApiService.searchCases(query: query, page: 1);
+      final List<dynamic> results = response['results'] ?? [];
+      setState(() {
+        _results = results.map((e) => CaseMessageListItem.fromJson(e)).toList();
+        _hasMore = response['next'] != null;
+        _currentPage = 1;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('搜索失敗：$e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_isLoadingMore || !_hasMore) return;
+    setState(() => _isLoadingMore = true);
+
+    try {
+      final nextPage = _currentPage + 1;
+      final response =
+          await ApiService.searchCases(query: _lastQuery, page: nextPage);
+      final List<dynamic> results = response['results'] ?? [];
+      final moreItems =
+          results.map((e) => CaseMessageListItem.fromJson(e)).toList();
+
+      setState(() {
+        _results.addAll(moreItems);
+        _currentPage = nextPage;
+        _hasMore = response['next'] != null;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加載更多失敗：$e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
       }
     }
   }
@@ -186,75 +168,127 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
 
   @override
   Widget build(BuildContext context) {
-    final provider = Provider.of<CaseMessageProvider>(context);
-    _handleCaseUnreadCountChanges(
-      provider.caseMessageList,
-      isLoading: provider.isLoading,
-    );
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('案件訊息'),
-        centerTitle: true,
+        title: const Text('搜索案件'),
         backgroundColor: const Color(0xFF469030),
         foregroundColor: Colors.white,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: '搜索案件',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const CaseMessageSearchScreen(),
+        centerTitle: true,
+      ),
+      body: Column(
+        children: [
+          // 搜索欄（固定在頂部）
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    focusNode: _focusNode,
+                    textInputAction: TextInputAction.search,
+                    onSubmitted: (_) => _search(fromButton: true),
+                    decoration: InputDecoration(
+                      hintText: '輸入地址關鍵字搜索（近七天）',
+                      hintStyle: TextStyle(color: Colors.grey.shade400),
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: Colors.grey),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      filled: true,
+                      fillColor: Colors.grey.shade100,
+                      contentPadding: const EdgeInsets.symmetric(
+                          vertical: 10, horizontal: 12),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
                 ),
-              );
-            },
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : () => _search(fromButton: true),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF469030),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24),
+                    ),
+                  ),
+                  child: const Text('搜索'),
+                ),
+              ],
+            ),
           ),
+          const Divider(height: 1),
+
+          // 結果區域
+          Expanded(child: _buildBody()),
         ],
       ),
-      body: provider.isLoading && provider.caseMessageList.isEmpty
-          ? const Center(child: CircularProgressIndicator())
-          : provider.caseMessageList.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
-                      Icon(
-                        Icons.message_outlined,
-                        size: 64,
-                        color: Colors.grey,
-                      ),
-                      SizedBox(height: 16),
-                      Text(
-                        '暫無案件訊息',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  controller: _scrollController,
-                  itemCount: provider.caseMessageList.length +
-                      (provider.isLoadingMore ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    // 加載更多指示器
-                    if (index == provider.caseMessageList.length) {
-                      return const Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Center(
-                          child: CircularProgressIndicator(),
-                        ),
-                      );
-                    }
+    );
+  }
 
-                    final item = provider.caseMessageList[index];
-                    return _buildCaseMessageItem(context, item);
-                  },
-                ),
+  Widget _buildBody() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (!_hasSearched) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              '輸入地址關鍵字進行搜索',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_results.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey.shade300),
+            const SizedBox(height: 16),
+            Text(
+              '找不到符合的案件',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      itemCount: _results.length + (_isLoadingMore ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == _results.length) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return _buildCaseMessageItem(context, _results[index]);
+      },
     );
   }
 
@@ -262,7 +296,6 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
       BuildContext context, CaseMessageListItem item) {
     return InkWell(
       onTap: () {
-        // 導航到詳情頁（timer 由 RouteAware 自動管理）
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -333,11 +366,8 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
                   // 司機資訊
                   Row(
                     children: [
-                      Icon(
-                        Icons.person,
-                        size: 14,
-                        color: Colors.grey.shade600,
-                      ),
+                      Icon(Icons.person,
+                          size: 14, color: Colors.grey.shade600),
                       const SizedBox(width: 4),
                       Text(
                         '${item.driverNickName}（${item.driverName}）',
@@ -350,6 +380,29 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
                   ),
 
                   const SizedBox(height: 6),
+
+                  // 地址（搜索結果突出顯示地址）
+                  if (item.onAddress != null && item.onAddress!.isNotEmpty) ...[
+                    Row(
+                      children: [
+                        Icon(Icons.location_on,
+                            size: 14, color: Colors.grey.shade600),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.onAddress!,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade700,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                  ],
 
                   // 最新消息
                   Row(
@@ -435,4 +488,3 @@ class _CaseMessageListScreenState extends State<CaseMessageListScreen> with Rout
     );
   }
 }
-

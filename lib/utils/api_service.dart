@@ -737,5 +737,54 @@ class ApiService {
     }
   }
 
+  // 搜索案件（地址模糊查詢，最近七天）
+  static Future<Map<String, dynamic>> searchCases({
+    required String query,
+    int page = 1,
+  }) async {
+    final headers = await _getHeaders();
+    try {
+      final uri = Uri.parse('$baseUrl/api/dispatch/v2/cases/search/').replace(
+        queryParameters: {
+          'q': query,
+          'page': '$page',
+        },
+      );
+
+      debugPrint('=== 搜索案件 ===');
+      debugPrint('URL: $uri');
+
+      final response = await http.get(
+        uri,
+        headers: {
+          ...headers,
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint('回應狀態碼: ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final responseBody = utf8.decode(response.bodyBytes);
+        final decoded = jsonDecode(responseBody);
+        debugPrint('搜索案件成功: ${decoded['count']} 個結果');
+        return decoded;
+      } else if (response.statusCode == 401) {
+        throw Exception('搜索案件失敗: 401 - 請重新登入');
+      } else {
+        debugPrint('錯誤回應: ${response.statusCode} - ${response.body}');
+        throw Exception('搜索案件失敗: ${response.statusCode}');
+      }
+    } on TimeoutException {
+      debugPrint('搜索案件請求超時');
+      throw Exception('搜索案件超時，請檢查網路連線');
+    } catch (e) {
+      debugPrint('搜索案件錯誤: $e');
+      rethrow;
+    }
+  }
+
 
 } 
