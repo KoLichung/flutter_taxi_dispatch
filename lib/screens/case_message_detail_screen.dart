@@ -63,6 +63,7 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
   @override
   void initState() {
     super.initState();
+    _scrollController.addListener(_onScroll);
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final provider =
@@ -93,10 +94,23 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
     });
   }
 
+  void _onScroll() {
+    // reverse: true 的 ListView 中，滾動到頂部（視覺上的最舊訊息）
+    // 對應 maxScrollExtent（因為滾動方向被反轉了）
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      final provider = Provider.of<CaseMessageProvider>(context, listen: false);
+      if (!provider.isLoadingMoreMessages && provider.hasMoreMessages) {
+        provider.loadMoreCaseMessages(widget.caseId);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _autoRefreshTimer?.cancel();
     _messageController.dispose();
+    _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
   }
@@ -762,10 +776,33 @@ class _CaseMessageDetailScreenState extends State<CaseMessageDetailScreen> {
                             left: 16,
                             right: 16,
                           ),
-                          itemCount: provider.currentCaseMessages.length,
+                          itemCount: provider.currentCaseMessages.length +
+                              (provider.isLoadingMoreMessages ? 1 : 0) +
+                              (!provider.hasMoreMessages && provider.currentCaseMessages.isNotEmpty ? 1 : 0),
                           itemBuilder: (context, index) {
-                            final message =
-                                provider.currentCaseMessages[index];
+                            final totalMessages = provider.currentCaseMessages.length;
+
+                            // 最後一個 item（在 reverse list 中顯示在最頂部）
+                            if (index == totalMessages) {
+                              if (provider.isLoadingMoreMessages) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Center(child: CircularProgressIndicator()),
+                                );
+                              } else if (!provider.hasMoreMessages) {
+                                return const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Center(
+                                    child: Text(
+                                      '已顯示全部訊息',
+                                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                                    ),
+                                  ),
+                                );
+                              }
+                            }
+
+                            final message = provider.currentCaseMessages[index];
                             return _buildMessageItem(
                                 context, message, currentUserId);
                           },

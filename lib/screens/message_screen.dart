@@ -724,7 +724,26 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
             IconButton(
               icon: const Icon(Icons.exit_to_app),
               onPressed: () async {
-                await userProvider.logout();
+                final confirmed = await showDialog<bool>(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text('確認登出'),
+                    content: const Text('您確定要登出嗎？'),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, false),
+                        child: const Text('取消'),
+                      ),
+                      TextButton(
+                        onPressed: () => Navigator.pop(context, true),
+                        child: const Text('登出'),
+                      ),
+                    ],
+                  ),
+                );
+                if (confirmed == true && context.mounted) {
+                  await userProvider.logout();
+                }
               },
             ),
           ],

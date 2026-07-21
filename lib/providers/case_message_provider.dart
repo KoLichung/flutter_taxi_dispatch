@@ -17,11 +17,18 @@ class CaseMessageProvider extends ChangeNotifier {
   // 用於防止分頁時列表重排的標記
   bool _isPaginating = false;
 
+  // 案件訊息分頁狀態
+  int _currentMessagesPage = 1;
+  bool _hasMoreMessages = true;
+  bool _isLoadingMoreMessages = false;
+
   List<CaseMessageListItem> get caseMessageList => _caseMessageList;
   List<CaseMessage> get currentCaseMessages => _currentCaseMessages;
   bool get isLoading => _isLoading;
   bool get isLoadingMore => _isLoadingMore;
   bool get hasMore => _hasMore;
+  bool get hasMoreMessages => _hasMoreMessages;
+  bool get isLoadingMoreMessages => _isLoadingMoreMessages;
 
   // 啟動自動刷新 timer（每 5 秒）
   void startAutoRefresh() {
@@ -144,24 +151,84 @@ class CaseMessageProvider extends ChangeNotifier {
     if (refresh) {
       _isLoading = true;
       _currentCaseMessages = [];
+      _currentMessagesPage = 1;
+      _hasMoreMessages = true;
       notifyListeners();
     }
 
     try {
-      // 調用真實 API
+      // 調用真實 API（始終拉第一頁以同步最新訊息）
       final response = await ApiService.getCaseMessages(caseId: caseId, page: 1);
       
       final List<dynamic> results = response['results'] ?? [];
       final serverMessages = results.map((e) => CaseMessage.fromJson(e)).toList();
       
-      // 直接用 server 的訊息替換本地訊息（完全以 server 為準）
-      _currentCaseMessages = serverMessages;
+      if (refresh) {
+        // 完整刷新：直接替換
+        _currentCaseMessages = serverMessages;
+        // API 以最新訊息優先返回，next 指向下一頁（更舊的訊息）
+        _hasMoreMessages = response['next'] != null;
+      } else {
+        // 自動刷新：合併新訊息（避免覆蓋已向上翻頁的舊訊息）
+        _mergeNewMessages(serverMessages);
+        // 自動刷新不更新 hasMoreMessages，避免覆蓋分頁狀態
+      }
       
     } catch (e) {
       debugPrint('獲取案件消息失敗: $e');
       rethrow;
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // 合併最新一頁的訊息，保留已加載的舊訊息
+  void _mergeNewMessages(List<CaseMessage> newMessages) {
+    if (_currentCaseMessages.isEmpty) {
+      _currentCaseMessages = newMessages;
+      return;
+    }
+    final existingIds = _currentCaseMessages.map((m) => m.id).toSet();
+    final trulyNew = newMessages.where((m) => !existingIds.contains(m.id)).toList();
+    if (trulyNew.isNotEmpty) {
+      // 新訊息插在列表最前面（reverse list 中顯示在底部）
+      _currentCaseMessages = [...trulyNew, ..._currentCaseMessages];
+    }
+    // 更新已存在訊息的已讀狀態
+    final newMap = {for (var m in newMessages) m.id: m};
+    _currentCaseMessages = _currentCaseMessages.map((m) {
+      return newMap[m.id] ?? m;
+    }).toList();
+  }
+
+  // 加載更多舊訊息（向上翻頁）
+  Future<void> loadMoreCaseMessages(int caseId) async {
+    if (_isLoadingMoreMessages || !_hasMoreMessages) return;
+
+    _isLoadingMoreMessages = true;
+    notifyListeners();
+
+    try {
+      final nextPage = _currentMessagesPage + 1;
+      final response = await ApiService.getCaseMessages(caseId: caseId, page: nextPage);
+
+      final List<dynamic> results = response['results'] ?? [];
+      final olderMessages = results.map((e) => CaseMessage.fromJson(e)).toList();
+
+      if (olderMessages.isNotEmpty) {
+        final existingIds = _currentCaseMessages.map((m) => m.id).toSet();
+        final newOld = olderMessages.where((m) => !existingIds.contains(m.id)).toList();
+        // 舊訊息接在列表末尾（reverse list 中顯示在頂部）
+        _currentCaseMessages = [..._currentCaseMessages, ...newOld];
+        _currentMessagesPage = nextPage;
+      }
+      // next 指向更舊的訊息頁
+      _hasMoreMessages = response['next'] != null;
+    } catch (e) {
+      debugPrint('加載更多案件訊息失敗: $e');
+    } finally {
+      _isLoadingMoreMessages = false;
       notifyListeners();
     }
   }
