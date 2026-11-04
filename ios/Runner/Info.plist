@@ -4,10 +4,10 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>zh_TW</string>
 	<key>CFBundleAllowMixedLocalizations</key>
 	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>zh_TW</string>
 	<key>CFBundleDisplayName</key>
 	<string>24H叫車</string>
 	<key>CFBundleExecutable</key>
@@ -16,6 +16,12 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh_TW</string>
+		<string>zh_CN</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>24H叫車</string>
 	<key>CFBundlePackageType</key>
@@ -26,10 +32,22 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>需要使用相機來拍攝照片</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要儲存照片到相簿</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>需要存取相簿來選擇照片</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -39,24 +57,6 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-	</array>
-	<key>FirebaseAppDelegateProxyEnabled</key>
-	<true/>
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>remote-notification</string>
-	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>需要使用相機來拍攝照片</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>需要存取相簿來選擇照片</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>需要儲存照片到相簿</string>
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>zh_TW</string>
-		<string>zh_CN</string>
-		<string>en</string>
 	</array>
 </dict>
 </plist>

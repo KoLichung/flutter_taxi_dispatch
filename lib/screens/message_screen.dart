@@ -231,8 +231,8 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     // 先停止舊的 timer（如果存在）
     _stopAutoFetch();
     
-    // Auto fetch messages every 3 seconds
-    _timer = Timer.periodic(const Duration(seconds: 3), (timer) async {
+    // Auto fetch messages every 4 seconds
+    _timer = Timer.periodic(const Duration(seconds: 4), (timer) async {
       if (!mounted) return;
       
       try {
