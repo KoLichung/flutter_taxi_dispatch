@@ -44,6 +44,9 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
   
   // Flag to track if the initial scroll to bottom has been done
   bool _initialScrollDone = false;
+
+  // 版本號（build number）
+  String _buildNumber = '';
   
   // 全域變數存儲 EditableTextState
   EditableTextState? _currentEditableTextState;
@@ -57,9 +60,18 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
     _clearNotifications();
     
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadBuildNumber();
       _getLatestAppVersion();
       _initMessages();
       _startAutoFetch();
+    });
+  }
+
+  Future<void> _loadBuildNumber() async {
+    final packageInfo = await PackageInfo.fromPlatform();
+    if (!mounted) return;
+    setState(() {
+      _buildNumber = packageInfo.buildNumber;
     });
   }
 
@@ -670,8 +682,11 @@ class _MessageScreenState extends State<MessageScreen> with RouteAware {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text('24H 叫車 - ${userProvider.user?.nickName ?? '用戶'}'),
-          centerTitle: true,  // Center the title
+          title: Text(
+            'v$_buildNumber - ${userProvider.user?.nickName ?? '用戶'}',
+            style: const TextStyle(fontSize: 18),
+          ),
+          centerTitle: false,
           backgroundColor: const Color(0xFF469030),
           foregroundColor: Colors.white,
           leading: IconButton(
