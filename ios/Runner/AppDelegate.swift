@@ -5,7 +5,7 @@ import FirebaseMessaging
 import UserNotifications
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -31,10 +31,13 @@ import UserNotifications
     // 設定預設通知聲音
     Messaging.messaging().delegate = self
     
-    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
-  
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+  }
+
   // 處理收到通知時的動作
   override func userNotificationCenter(
     _ center: UNUserNotificationCenter,
@@ -43,6 +46,28 @@ import UserNotifications
   ) {
     // 在前景時不顯示通知
     completionHandler([])
+  }
+}
+
+class SceneDelegate: FlutterSceneDelegate {
+  override func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    guard let windowScene = scene as? UIWindowScene else { return }
+
+    let flutterViewController = FlutterViewController(project: nil, nibName: nil, bundle: nil)
+    let flutterWindow = UIWindow(windowScene: windowScene)
+    flutterWindow.rootViewController = flutterViewController
+    window = flutterWindow
+    flutterWindow.makeKeyAndVisible()
+
+    super.scene(scene, willConnectTo: session, options: connectionOptions)
+
+    if let appDelegate = UIApplication.shared.delegate as? FlutterAppDelegate {
+      appDelegate.window = flutterWindow
+    }
   }
 }
 

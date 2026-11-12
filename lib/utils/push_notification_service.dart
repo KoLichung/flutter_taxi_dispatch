@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -41,10 +42,17 @@ class PushNotificationService {
       // 設定點擊通知處理
       FirebaseMessaging.onMessageOpenedApp.listen(handleNotificationTap);
       
-      // 處理應用程式從終止狀態被通知喚醒的情況
-      final initialMessage = await messaging.getInitialMessage();
-      if (initialMessage != null) {
-        handleNotificationTap(initialMessage);
+      // 處理應用程式從終止狀態被通知喚醒的情況。
+      // iOS 27 UIScene 下，沒有從通知啟動時這個 Future 可能永不完成。
+      try {
+        final initialMessage = await messaging.getInitialMessage().timeout(
+          const Duration(seconds: 3),
+        );
+        if (initialMessage != null) {
+          handleNotificationTap(initialMessage);
+        }
+      } on TimeoutException {
+        debugPrint('getInitialMessage 逾時，略過');
       }
       
       // 設定預設通知聲音

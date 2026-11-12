@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -23,16 +25,13 @@ void main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  
-  // 初始化推播服務
-  try {
-    await PushNotificationService.initialize();
-  } catch (e) {
-    debugPrint('推播服務初始化失敗: $e');
-    // 即使推播初始化失敗，app 仍可正常運作
-  }
-  
+
+  // 先畫出畫面。iOS 27 的 getInitialMessage 可能一直不返回，
+  // 若在 runApp 之前 await 推播初始化，會停在白色啟動畫面。
   runApp(const MyApp());
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(PushNotificationService.initialize());
+  });
 }
 
 class MyApp extends StatelessWidget {
