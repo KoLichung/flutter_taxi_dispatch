@@ -988,7 +988,8 @@ class _MessageListView extends StatelessWidget {
       return secondLine.contains('預約單成功') ||
              secondLine.contains('派單成功，正在尋找駕駛') ||
              secondLine.contains('車輛預估') ||
-             secondLine.contains('司機到達地點');
+             secondLine.contains('司機到達地點') ||
+             secondLine.contains('駕駛通知已抵達');
     } catch (e) {
       print('Error in _isCancellableMessage: $e');
       return false;
@@ -1016,9 +1017,14 @@ class _MessageListView extends StatelessWidget {
     );
   }
   
+  bool _isDriverArrivedMessage(String content) {
+    return content.contains('司機到達地點');
+  }
+
   Widget _buildMessageItem(BuildContext context, Message message) {
     final isUserMessage = !message.isFromServer;
     final isCancellable = !isUserMessage && _isCancellableMessage(message.content);
+    final isDriverArrived = !isUserMessage && _isDriverArrivedMessage(message.content);
     
     return Align(
       alignment: isUserMessage ? Alignment.centerRight : Alignment.centerLeft,
@@ -1028,7 +1034,11 @@ class _MessageListView extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isUserMessage ? const Color(0xFF469030) : Colors.grey.shade200,
+          color: isUserMessage
+              ? const Color(0xFF469030)
+              : isDriverArrived
+                  ? const Color(0xFFFFE4EC)
+                  : Colors.grey.shade200,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
